@@ -18,7 +18,10 @@ A secure, private personal and family finance web application designed for exact
 
 ```text
 family-finance-antigravity/
+├── .claspignore               # Clasp deployment synchronization exclusion rules
+├── .gitignore                 # Git ignore rules for secrets and development artifacts
 ├── AGENTS.md                  # Development instructions, boundaries, and AI conventions
+├── appsscript.json            # Google Apps Script project manifest
 ├── architecture.md            # System architecture and technical baseline
 ├── database-schema.md         # Google Sheets schema specifications
 ├── implementation-plan.md     # Incremental task breakdown and release checklist

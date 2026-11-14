@@ -1,0 +1,25 @@
+# Clasp configuration and authentication credentials
+.clasprc.json
+.clasp.json
+
+# Node dependencies and npm logs (GitHub Actions CI only)
+node_modules/
+npm-debug.log*
+
+# Environment secrets and credentials
+.env
+.env.*
+*.secret
+*.key
+*.pem
+
+# Local IDE and operating system artifacts
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak

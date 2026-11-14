@@ -1,0 +1,42 @@
+# Ignore Git metadata and repository configuration
+.git/**
+.gitignore
+
+# Ignore CI/CD workflows and configuration
+.github/**
+
+# Ignore project documentation
+*.md
+docs/**
+
+# Ignore dependency and tooling manifests (GitHub Actions CI only)
+package.json
+package-lock.json
+node_modules/**
+
+# Ignore Clasp configuration and credentials
+.clasp.json
+.clasprc.json
+.claspignore
+
+# Ignore local development artifacts, IDE settings, and OS files
+.DS_Store
+Thumbs.db
+*.log
+.vscode/**
+.idea/**
+
+# Ignore placeholder files in source tree (not valid Apps Script file type)
+**/.gitkeep
+
+# Ignore test files and test runners
+test/**
+tests/**
+*.test.js
+*.spec.js
+
+# Ignore prompts and temporary files
+prompt*.txt
+*.tmp
+*.bak
+scratch/**
