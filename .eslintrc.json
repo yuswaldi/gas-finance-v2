@@ -1,0 +1,28 @@
+{
+  "env": {
+    "es2021": true,
+    "node": true
+  },
+  "extends": "eslint:recommended",
+  "parserOptions": {
+    "ecmaVersion": 12,
+    "sourceType": "script"
+  },
+  "globals": {
+    "SpreadsheetApp": "readonly",
+    "DriveApp": "readonly",
+    "UrlFetchApp": "readonly",
+    "Utilities": "readonly",
+    "Logger": "readonly",
+    "Session": "readonly",
+    "LockService": "readonly",
+    "PropertiesService": "readonly",
+    "HtmlService": "readonly",
+    "CacheService": "readonly",
+    "ScriptApp": "readonly"
+  },
+  "rules": {
+    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
+    "no-undef": "error"
+  }
+}

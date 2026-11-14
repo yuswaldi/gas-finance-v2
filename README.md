@@ -19,21 +19,30 @@ A secure, private personal and family finance web application designed for exact
 ```text
 family-finance-antigravity/
 ├── .claspignore               # Clasp deployment synchronization exclusion rules
+├── .eslintrc.json             # ESLint configuration for CI static analysis
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # GitHub Actions CI workflow (lint, syntax, unit tests)
 ├── .gitignore                 # Git ignore rules for secrets and development artifacts
 ├── AGENTS.md                  # Development instructions, boundaries, and AI conventions
 ├── appsscript.json            # Google Apps Script project manifest
 ├── architecture.md            # System architecture and technical baseline
 ├── database-schema.md         # Google Sheets schema specifications
 ├── implementation-plan.md     # Incremental task breakdown and release checklist
+├── package.json               # CI manifest for development dependencies and test scripts
 ├── prd.md                     # Product requirements document
 ├── README.md                  # Project overview and developer guidelines
-└── src/                       # Application source tree (Google Apps Script)
-    ├── auth/                  # Authentication, session management, and GIS tokeninfo verification
-    ├── common/                # Shared utilities, constants, error handling, and response models
-    ├── database/              # Schema registry, migrations, repositories, and batch I/O
-    ├── finance/               # Ledger engine, accounts, categories, transactions, budgets, bills
-    ├── jobs/                  # Time-driven triggers, reconciliation, and maintenance jobs
-    └── ui/                    # HTMLService templates, styles, and client-side logic
+├── scripts/                   # CI scripts (JavaScript/Apps Script syntax check)
+│   └── check-syntax.js
+├── src/                       # Application source tree (Google Apps Script)
+│   ├── auth/                  # Authentication, session management, and GIS tokeninfo verification
+│   ├── common/                # Shared utilities, constants, error handling, and response models
+│   ├── database/              # Schema registry, migrations, repositories, and batch I/O
+│   ├── finance/               # Ledger engine, accounts, categories, transactions, budgets, bills
+│   ├── jobs/                  # Time-driven triggers, reconciliation, and maintenance jobs
+│   └── ui/                    # HTMLService templates, styles, and client-side logic
+└── tests/                     # CI unit test specs (executed via node:test in GitHub Actions)
+    └── ci-baseline.test.js
 ```
 
 ### Source Modules Breakdown

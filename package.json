@@ -1,0 +1,16 @@
+{
+  "name": "family-finance-antigravity",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Personal & Family Finance Manager - Google Apps Script CI and test tooling manifest",
+  "scripts": {
+    "lint": "eslint --ext .js,.gs --no-error-on-unmatched-pattern src/",
+    "syntax:check": "node scripts/check-syntax.js",
+    "test": "node --test tests/**/*.test.js",
+    "ci": "npm run syntax:check && npm run lint && npm run test"
+  },
+  "devDependencies": {
+    "@types/google-apps-script": "^1.0.83",
+    "eslint": "^8.57.1"
+  }
+}
