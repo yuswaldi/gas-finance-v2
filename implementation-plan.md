@@ -2,7 +2,8 @@
 # Personal & Family Finance Manager
 
 - Delivery model: incremental vertical slices
-- Source control: Git + Clasp
+- Source control: Git inside the Docker development container at `/var/www/gas/personal_finance_v2/family-finance-antigravity`; Clasp runs only inside GitHub Actions
+- Runtime distinction: Apps Script V8 is the application runtime; Node.js is a CI-only tool in GitHub Actions
 - Mandatory workflow: one task → tests → documentation → Git commit
 - Environment: separate DEV and PROD Apps Script projects and spreadsheets
 
@@ -38,22 +39,25 @@ If testing fails, do not mark the task complete and do not create a completion c
 
 ## 2. Delivery phases
 
-### Phase 0 — Repository and tooling foundation
+### Phase 0 — Repository and GitHub Actions foundation
 Tasks:
-- Initialize repository and Clasp project.
-- Configure `.clasp.json` for DEV only.
-- Add `.claspignore`.
-- Add `appsscript.json`.
-- Configure local lint/syntax/test tooling.
-- Add README and environment setup guide.
-- Add GitHub Actions CI.
-- Add protected branch and deployment concurrency policy.
+- [x] Initialize the Git repository and source tree in the Docker development container at `/var/www/gas/personal_finance_v2/family-finance-antigravity`; run Antigravity CLI and Git there. (FFM-001)
+- [x] Add `appsscript.json` and `.claspignore`. (FFM-002)
+- [x] Add `package.json` only for CI-side test/lint scripts and development dependencies; no local Node.js installation is required. (FFM-003)
+- [x] Add GitHub Actions CI workflow. (FFM-003)
+- [x] In GitHub Actions, set up the approved Node.js LTS version and install test/lint tooling. (FFM-003)
+- [x] In GitHub Actions, install Clasp and generate environment-specific `.clasp.json` at runtime. (FFM-004)
+- [x] Configure Clasp authentication using GitHub Actions secrets. (FFM-004)
+- [x] Configure automatic DEV synchronization from the development branch. (FFM-004)
+- [ ] Configure production deployment from protected `main`, with required approvals and deployment concurrency. (FFM-005)
+- [x] Add README explaining that AI-assisted development and Git operations run inside the Docker container, while all Node.js/Clasp execution happens in GitHub Actions. (FFM-001, FFM-004)
 
 Exit criteria:
-- Clean clone can install development tooling.
-- `clasp status` and DEV push work.
-- CI runs on pull requests.
-- No credentials are tracked.
+- A developer can clone the repository, edit files, and use Git without installing Node.js or Clasp.
+- Pull requests run CI in GitHub Actions.
+- A push/merge to the development branch synchronizes source to the DEV Apps Script project from GitHub Actions.
+- A protected production release deploys using Clasp from GitHub Actions.
+- No credentials or generated private environment configuration are tracked.
 
 ### Phase 1 — Authentication proof of concept (GO/NO-GO)
 Tasks:
@@ -222,38 +226,59 @@ Exit criteria:
 
 Use one task per independently reviewable unit. Suggested IDs:
 
-| ID | Task |
-|---|---|
-| FFM-001 | Initialize repository and Clasp DEV project |
-| FFM-002 | Add project manifest, ignore rules, and local tooling |
-| FFM-003 | Add CI workflow and secret scanning |
-| FFM-004 | Create GIS HtmlService proof of concept |
-| FFM-005 | Implement server-issued login nonce |
-| FFM-006 | Implement tokeninfo verification and claim validation |
-| FFM-007 | Seed allowlisted Google identities |
-| FFM-008 | Implement application session storage |
-| FFM-009 | Implement logout, expiry, and revocation |
-| FFM-010 | Implement household and role authorization |
-| FFM-011 | Implement schema registry and migrations |
-| FFM-012 | Implement repositories and batch I/O |
-| FFM-013 | Implement account and category modules |
-| FFM-014 | Implement transaction draft and validation |
-| FFM-015 | Implement ledger posting and idempotency |
-| FFM-016 | Implement transfers and reversal |
-| FFM-017 | Implement dashboard |
-| FFM-018 | Implement budgets |
-| FFM-019 | Implement bills and recurring jobs |
-| FFM-020 | Implement savings and debt |
-| FFM-021 | Implement assets and investments |
-| FFM-022 | Implement reports and exports |
-| FFM-023 | Implement attachments and access checks |
-| FFM-024 | Implement backup and restore |
-| FFM-025 | Production hardening and deployment |
+| ID | Task | Status |
+|---|---|---|
+| FFM-001 | Initialize repository and source tree inside the Docker development container; Git runs there | Completed |
+| FFM-002 | Add Apps Script manifest and ignore rules | Completed |
+| FFM-003 | Add GitHub Actions CI with Node.js and test tooling | Completed |
+| FFM-004 | Add GitHub Actions DEV sync using Clasp (runner only) | Completed |
+| FFM-005 | Add protected production deployment using Clasp (runner only) | Pending |
+| FFM-006 | Create GIS HtmlService proof of concept | Pending |
+| FFM-007 | Implement server-issued login nonce | Pending |
+| FFM-008 | Implement tokeninfo verification and claim validation | Pending |
+| FFM-009 | Seed allowlisted Google identities | Pending |
+| FFM-010 | Implement application session storage | Pending |
+| FFM-011 | Implement logout, expiry, and revocation | Pending |
+| FFM-012 | Implement household and role authorization | Pending |
+| FFM-013 | Implement schema registry and migrations | Pending |
+| FFM-014 | Implement repositories and batch I/O | Pending |
+| FFM-015 | Implement account and category modules | Pending |
+| FFM-016 | Implement transaction draft and validation | Pending |
+| FFM-017 | Implement ledger posting and idempotency | Pending |
+| FFM-018 | Implement transfers and reversal | Pending |
+| FFM-019 | Implement dashboard | Pending |
+| FFM-020 | Implement budgets | Pending |
+| FFM-021 | Implement bills and recurring jobs | Pending |
+| FFM-022 | Implement savings and debt | Pending |
+| FFM-023 | Implement assets and investments | Pending |
+| FFM-024 | Implement reports and exports | Pending |
+| FFM-025 | Implement attachments and access checks | Pending |
+| FFM-026 | Implement backup and restore | Pending |
+| FFM-027 | Production hardening and deployment | Pending |
 
-## 4. Testing strategy
+## 4. Docker development container and CI responsibility split
+
+Canonical Docker workspace: `/var/www/gas/personal_finance_v2/family-finance-antigravity`. Antigravity CLI, project edits, repository inspection, and Git operations MUST run inside the configured Docker development container from this root. If the agent is not in that container/root, it must stop rather than use an alternate path. The host is only a connection point.
+
+| Activity | Docker development container | Developer host | GitHub Actions |
+|---|---|---|---|
+| Run Antigravity CLI | Yes | No | No |
+| Edit source and Markdown | Yes | No (connect to container editor) | No |
+| Git status/diff/commit/push | Yes | No | Checkout and report |
+| Node.js runtime | No | No | Yes |
+| npm / npx | No | No | Yes |
+| Clasp installation and execution | No | No | Yes |
+| Unit tests / lint / syntax checks requiring Node.js | No | No | Yes |
+| Apps Script DEV push | No | No | Yes |
+| Apps Script PROD deployment | No | No | Yes |
+| Clasp credentials | Never | Never | GitHub Actions secrets |
+
+All Clasp configuration should be generated per environment inside the workflow. Do not require a developer to create or maintain a local `.clasp.json` or `.clasprc.json`. Do not install Node.js/Clasp in the development container just to run CI tasks.
+
+## 5. Testing strategy
 
 ### Unit tests
-Use a local JavaScript test runner for pure functions:
+Use the JavaScript test runner inside GitHub Actions for pure functions:
 - Amount validation.
 - Date and recurrence calculations.
 - Split allocation.
@@ -297,7 +322,7 @@ Use a disposable DEV spreadsheet:
 - Repeated idempotency key.
 - Direct browser attempt to supply a different user/role/household.
 
-## 5. Git commit policy
+## 6. Git commit policy
 
 Commit after every task has passed tests and documentation updates.
 
@@ -314,7 +339,7 @@ docs(security): document Gmail authentication constraints
 
 Do not commit secrets, `.clasprc.json`, OAuth client secrets, production spreadsheet exports, or personal financial data.
 
-## 6. Release checklist
+## 7. Release checklist
 
 - [ ] Authentication proof-of-concept gate passed.
 - [ ] Both Gmail identities registered and tested.

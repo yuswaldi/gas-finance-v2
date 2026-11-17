@@ -22,7 +22,7 @@
 | File storage | Private Google Drive folder |
 | Authorization | Server-side household membership + role checks |
 | Concurrency | LockService + operation journal + idempotency |
-| Deployment | Clasp + GitHub Actions |
+| Deployment | GitHub Actions only; Node.js and Clasp execute only in GitHub-hosted runners |
 | Environment separation | Separate DEV and PROD script projects and spreadsheets |
 
 ## 2. High-level component diagram
@@ -42,8 +42,9 @@ flowchart TD
     REPO --> SHEETS[(Private Google Sheets)]
     DOMAIN --> DRIVE[(Private Google Drive attachments)]
     JOBS[Time-driven triggers] --> DOMAIN
-    DEV[Developer + Clasp] --> GIT[GitHub]
-    GIT --> CI[GitHub Actions]
+    HOST[Developer host: connect to Docker only] --> DOCKER[Docker dev container: Antigravity CLI + project Git]
+    DOCKER --> GIT[GitHub]
+    GIT --> CI[GitHub Actions: Node.js + Clasp]
     CI --> GAS
 ```
 
@@ -227,7 +228,37 @@ Use GitHub Actions secrets for Clasp CI credentials. Do not commit `.clasprc.jso
 
 An OAuth client ID is not a secret, but it must be correctly restricted/configured. Never put an OAuth client secret in browser HTML.
 
-## 8. Deployment
+## 8. Development and deployment tooling boundary
+
+The GitHub repository is the only source of truth. Apps Script V8 remains the server-side application runtime; it is distinct from Node.js. Node.js is used only as a GitHub Actions runner tool.
+
+Docker development container (mandatory agent workspace):
+- Antigravity CLI runs inside the configured Docker development container.
+- Canonical project root: `/var/www/gas/personal_finance_v2/family-finance-antigravity`.
+- All source/documentation edits, repository inspection, Git operations, and permitted project commands run inside this container from that project root.
+- At the start of every agent session/task, verify `pwd` and `git rev-parse --show-toplevel`; stop if the canonical root does not match exactly.
+- The host is only a connection point. Do not run the agent or project commands from the host, another container, or an alternate checkout. Do not guess container names or create replacement containers.
+- Do not install or execute Node.js, npm, npx, or Clasp in this container or on the host.
+- Do not run `clasp push`, `clasp deploy`, or `clasp status` here.
+- Do not make direct production changes in the Apps Script editor. Emergency console changes require an explicit incident procedure and must be reconciled back into Git immediately.
+
+GitHub Actions:
+- Runs on GitHub-hosted runners.
+- Sets up the approved Node.js LTS version.
+- Installs development/test tools and Clasp in the runner only.
+- Runs lint, syntax checks, unit tests, and security checks.
+- Creates environment-specific `.clasp.json` at runtime using protected GitHub variables/secrets.
+- Authenticates Clasp using GitHub Actions secrets.
+- Pushes source to the DEV Apps Script project from the development branch.
+- Deploys production only from protected `main`, after required approvals/checks.
+- Uses concurrency groups to prevent overlapping deployments.
+- Runs a post-deployment smoke check where practical.
+
+Do not commit `.clasprc.json`, Clasp authentication material, generated environment-specific `.clasp.json` files containing private project IDs if repository policy treats them as sensitive, or production secrets. The CI workflow should generate environment-specific Clasp configuration at runtime.
+
+The `package.json` is a manifest for CI tooling and test scripts only. It does not add any frontend runtime dependency. Its scripts are executed in GitHub Actions, not in the Docker development container or on the host.
+
+## 9. Deployment
 
 - Separate DEV and PROD Apps Script projects.
 - Separate DEV and PROD spreadsheets and Drive attachment folders.
@@ -240,7 +271,37 @@ An OAuth client ID is not a secret, but it must be correctly restricted/configur
 - Smoke-test the deployed version after deployment.
 - Have a documented rollback to the previous Apps Script version.
 
-## 9. Monitoring, backup, and operations
+### 9.1 DEV Synchronization Workflow (`dev-sync.yml`)
+
+The DEV synchronization workflow (`.github/workflows/dev-sync.yml`) automates synchronizing source code to the Google Apps Script DEV project:
+
+1. **Triggers**:
+   - Automatic execution on pushes to `develop` or `dev` branches.
+   - Manual execution via `workflow_dispatch` (with branch guard preventing accidental execution against `main` unless explicitly forced).
+2. **Prerequisites & CI Verification**:
+   - Checks out the repository and configures Node.js 20 LTS in the GitHub-hosted runner.
+   - Runs full CI verification prior to deployment: Apps Script manifest validation, syntax checking, ESLint static analysis, and Node.js unit tests.
+   - If any CI check fails, execution terminates immediately with zero modification to the remote Apps Script project.
+3. **Clasp Installation & Runtime Configuration**:
+   - Clasp CLI (`@google/clasp@^2.4.2`) is installed exclusively inside the ephemeral GitHub Actions runner.
+   - Credentials are read from GitHub Actions secrets (`CLASP_DEV_CLASPRC_JSON` or `CLASPRC_JSON`) and written to `$HOME/.clasprc.json` with `chmod 600`.
+   - Script ID is retrieved from secrets or variables (`CLASP_DEV_SCRIPT_ID` or `DEV_SCRIPT_ID`).
+   - A temporary `.clasp.json` is generated dynamically at repository root with `rootDir: "."` and mode `600`.
+4. **Push Execution**:
+   - Runs `clasp push --force` to push project files respecting `.claspignore` (ignoring CI workflows, tests, documentation, tool configs, and prompt files).
+5. **Cleanup & Safety**:
+   - Temporary `$HOME/.clasprc.json` and `.clasp.json` are unconditionally removed in a post-execution step (`if: always()`).
+   - Workflow concurrency (`dev-sync` with `cancel-in-progress: false`) ensures deployments are serialized and prevents concurrent race conditions.
+   - Least privilege GitHub token permissions (`contents: read`).
+
+### 9.2 Required Secrets and Variables for DEV Sync
+
+| Name | Type | Purpose |
+|---|---|---|
+| `CLASP_DEV_CLASPRC_JSON` (or `CLASPRC_JSON`) | GitHub Secret | Full JSON contents of `~/.clasprc.json` containing OAuth tokens (`access_token`, `refresh_token`, `clientId`, `clientSecret`) for Clasp authentication. |
+| `DEV_SCRIPT_ID` (or `CLASP_DEV_SCRIPT_ID`) | GitHub Secret or Variable | Google Apps Script Script ID for the DEV project (found under Apps Script *Project Settings*). |
+
+## 10. Monitoring, backup, and operations
 - Log operational event IDs, function names, duration, outcome, and correlation IDs.
 - Redact tokens, passwords, PII not needed for diagnosis, and financial payloads.
 - Monitor Apps Script execution failures and quotas.
@@ -249,5 +310,5 @@ An OAuth client ID is not a secret, but it must be correctly restricted/configur
 - Document owner account recovery and transfer procedure.
 - Keep a manual ledger reconciliation report.
 
-## 10. Scaling boundary
+## 11. Scaling boundary
 This design is for a very small household application. Google Sheets is not a transactional database. Revisit the storage architecture if concurrent use, data volume, audit requirements, or financial criticality exceed what Sheets can safely support.

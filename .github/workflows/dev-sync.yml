@@ -1,0 +1,139 @@
+name: DEV Sync (Clasp)
+
+on:
+  push:
+    branches:
+      - develop
+      - dev
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Force DEV sync (required if running manually on main branch)'
+        required: false
+        type: boolean
+        default: false
+
+concurrency:
+  group: dev-sync
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync-dev:
+    name: Validate and Synchronize DEV
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Guard against accidental DEV sync on production main
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          if [ "${{ github.ref_name }}" = "main" ] && [ "${{ github.event.inputs.force }}" != "true" ]; then
+            echo "::error::DEV synchronization should not run on production main branch without explicit force flag. Use develop or dev branch."
+            exit 1
+          fi
+          echo "✓ Branch target check passed: ${{ github.ref_name }}"
+
+      - name: Set up Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CI dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Validate Apps Script manifest JSON
+        run: |
+          node -e "
+            const manifest = JSON.parse(require('fs').readFileSync('appsscript.json', 'utf8'));
+            if (!manifest.timeZone || !manifest.runtimeVersion) {
+              console.error('Missing mandatory fields in appsscript.json');
+              process.exit(1);
+            }
+            console.log('✓ appsscript.json is valid JSON with required runtime settings');
+          "
+
+      - name: Validate JavaScript and Apps Script syntax
+        run: npm run syntax:check
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Install Clasp in runner
+        run: |
+          npm install -g @google/clasp@^2.4.2
+          clasp --version
+
+      - name: Configure Clasp authentication
+        env:
+          CLASPRC_CONTENT: ${{ secrets.CLASP_DEV_CLASPRC_JSON || secrets.CLASPRC_JSON || secrets.CLASP_CREDENTIALS }}
+        run: |
+          if [ -z "$CLASPRC_CONTENT" ]; then
+            echo "::error::Missing Clasp authentication secret. Please set CLASP_DEV_CLASPRC_JSON or CLASPRC_JSON in GitHub repository secrets."
+            exit 1
+          fi
+          mkdir -p "$HOME"
+          printf '%s\n' "$CLASPRC_CONTENT" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          node -e "
+            try {
+              const creds = JSON.parse(require('fs').readFileSync(process.env.HOME + '/.clasprc.json', 'utf8'));
+              if (!creds.token && !creds.refresh_token) {
+                console.warn('::warning::Clasp credentials JSON does not contain standard token/refresh_token structure.');
+              }
+              console.log('✓ Clasp credentials JSON verified and configured in home directory');
+            } catch (err) {
+              console.error('::error::Failed to parse Clasp credentials as JSON. Ensure the secret contains valid JSON.');
+              process.exit(1);
+            }
+          "
+
+      - name: Generate DEV .clasp.json
+        env:
+          SCRIPT_ID: ${{ secrets.CLASP_DEV_SCRIPT_ID || secrets.DEV_SCRIPT_ID || vars.CLASP_DEV_SCRIPT_ID || vars.DEV_SCRIPT_ID }}
+        run: |
+          if [ -z "$SCRIPT_ID" ]; then
+            echo "::error::Missing DEV Script ID. Please configure CLASP_DEV_SCRIPT_ID or DEV_SCRIPT_ID in GitHub repository secrets or variables."
+            exit 1
+          fi
+          node -e "
+            const fs = require('fs');
+            const scriptId = process.env.SCRIPT_ID.trim();
+            if (!scriptId) {
+              console.error('::error::DEV Script ID is empty.');
+              process.exit(1);
+            }
+            const config = {
+              scriptId: scriptId,
+              rootDir: '.'
+            };
+            fs.writeFileSync('.clasp.json', JSON.stringify(config, null, 2) + '\n');
+          "
+          chmod 600 .clasp.json
+          echo "✓ Generated temporary .clasp.json for DEV synchronization"
+
+      - name: Push source to Google Apps Script DEV project
+        run: |
+          echo "Starting synchronization to DEV Google Apps Script..."
+          clasp push --force
+          echo "✓ Synchronization to DEV Google Apps Script completed successfully"
+
+      - name: Clean up temporary Clasp credentials and configuration
+        if: always()
+        run: |
+          rm -f "$HOME/.clasprc.json"
+          rm -f .clasp.json
+          echo "✓ Cleaned up temporary .clasprc.json and .clasp.json"

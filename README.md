@@ -22,7 +22,8 @@ family-finance-antigravity/
 ├── .eslintrc.json             # ESLint configuration for CI static analysis
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # GitHub Actions CI workflow (lint, syntax, unit tests)
+│       ├── ci.yml             # GitHub Actions CI workflow (lint, syntax, unit tests)
+│       └── dev-sync.yml       # GitHub Actions DEV sync workflow (runner Clasp push)
 ├── .gitignore                 # Git ignore rules for secrets and development artifacts
 ├── AGENTS.md                  # Development instructions, boundaries, and AI conventions
 ├── appsscript.json            # Google Apps Script project manifest
@@ -86,6 +87,19 @@ All AI-assisted development and Git operations MUST run inside the designated Do
 - **Zero Local Node.js / Clasp Dependency**: Developers do not need to install or run Node.js, npm, npx, or Clasp locally or inside the Docker development container.
 - **Strict Python Prohibition**: Python runtime, interpreter commands (`python`, `python3`), and `.py` scripts are strictly prohibited for project activities, inspection, and testing. Use native shell utilities (`bash`, `grep`, `find`, `sed`, `awk`, `git`).
 - **GitHub Actions as CI/CD Engine**: GitHub Actions sets up Node.js LTS, installs CI dependencies, runs automated checks, generates environment-specific `.clasp.json` at runtime, and synchronizes source to Google Apps Script.
+
+### DEV Synchronization Workflow
+
+The DEV sync workflow (`.github/workflows/dev-sync.yml`) synchronizes code to Google Apps Script:
+- **Triggers**: Automated on pushes to `develop` or `dev` branches; manual trigger via `workflow_dispatch`.
+- **Pre-deployment Verification**: Runs Apps Script manifest validation, syntax check, ESLint, and unit tests before installing Clasp or pushing files.
+- **Dynamic Clasp Configuration**: Installs `@google/clasp` in the runner, dynamically generates `.clasp.json` and `$HOME/.clasprc.json`, and cleans them up immediately on completion (`if: always()`).
+- **Concurrency**: Deployments are serialized using the `dev-sync` concurrency group to avoid overlapping synchronization.
+
+#### Required GitHub Secrets & Variables for DEV Sync
+
+1. `CLASP_DEV_CLASPRC_JSON` (or `CLASPRC_JSON`) [Secret]: JSON output of `~/.clasprc.json` after authenticating via `clasp login`.
+2. `DEV_SCRIPT_ID` (or `CLASP_DEV_SCRIPT_ID`) [Secret or Variable]: The Script ID of the DEV Google Apps Script project.
 
 ## 5. Security & Financial Correctness Invariants
 
