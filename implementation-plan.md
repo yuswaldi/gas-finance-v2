@@ -49,8 +49,8 @@ Tasks:
 - [x] In GitHub Actions, install Clasp and generate environment-specific `.clasp.json` at runtime. (FFM-004)
 - [x] Configure Clasp authentication using GitHub Actions secrets. (FFM-004)
 - [x] Configure automatic DEV synchronization from the development branch. (FFM-004)
-- [ ] Configure production deployment from protected `main`, with required approvals and deployment concurrency. (FFM-005)
-- [x] Add README explaining that AI-assisted development and Git operations run inside the Docker container, while all Node.js/Clasp execution happens in GitHub Actions. (FFM-001, FFM-004)
+- [x] Configure production deployment from protected `main`, with required approvals and deployment concurrency. (FFM-005 - adapted for GitHub Free Plan)
+- [x] Add README explaining that AI-assisted development and Git operations run inside the Docker container, while all Node.js/Clasp execution happens in GitHub Actions. (FFM-001, FFM-004, FFM-005)
 
 Exit criteria:
 - A developer can clone the repository, edit files, and use Git without installing Node.js or Clasp.
@@ -232,7 +232,7 @@ Use one task per independently reviewable unit. Suggested IDs:
 | FFM-002 | Add Apps Script manifest and ignore rules | Completed |
 | FFM-003 | Add GitHub Actions CI with Node.js and test tooling | Completed |
 | FFM-004 | Add GitHub Actions DEV sync using Clasp (runner only) | Completed |
-| FFM-005 | Add protected production deployment using Clasp (runner only) | Pending |
+| FFM-005 | Add protected production deployment using Clasp (runner only) | Completed |
 | FFM-006 | Create GIS HtmlService proof of concept | Pending |
 | FFM-007 | Implement server-issued login nonce | Pending |
 | FFM-008 | Implement tokeninfo verification and claim validation | Pending |
