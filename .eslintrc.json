@@ -1,7 +1,6 @@
 {
   "env": {
-    "es2021": true,
-    "node": true
+    "es2021": true
   },
   "extends": "eslint:recommended",
   "parserOptions": {
@@ -20,10 +19,31 @@
     "HtmlService": "readonly",
     "CacheService": "readonly",
     "ScriptApp": "readonly",
-    "AuthConfig": "readonly"
+    "AuthConfig": "writable"
   },
   "rules": {
-    "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],
-    "no-undef": "error"
-  }
+    "no-unused-vars": [
+      "warn",
+      {
+        "vars": "local",
+        "args": "after-used",
+        "argsIgnorePattern": "^_"
+      }
+    ],
+    "no-undef": "error",
+    "no-redeclare": [
+      "error",
+      {
+        "builtinGlobals": false
+      }
+    ]
+  },
+  "overrides": [
+    {
+      "files": ["tests/**/*.js", "scripts/**/*.js"],
+      "env": {
+        "node": true
+      }
+    }
+  ]
 }

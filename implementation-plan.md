@@ -72,6 +72,7 @@ Tasks:
 - [ ] 9. Record tokeninfo endpoint dependency, failure behavior, and latency.
 
 *Note on FFM-006 status:* Implementation and static unit tests completed. Live browser verification against deployed DEV Web App is pending post-push deployment and OAuth origin configuration.
+*Note on CI linter fix:* Resolved ESLint `no-redeclare` errors and `no-unused-vars` warnings for Apps Script global scope by updating `.eslintrc.json` (`vars: local`, `node: false` for `src/`) and removing redundant inline `/* global ... */` directives in `src/auth/config.js` and `src/ui/webapp.js`.
 
 Exit criteria:
 - Both users can log in reliably.

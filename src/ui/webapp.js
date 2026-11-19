@@ -1,5 +1,3 @@
-/* global HtmlService, AuthConfig */
-
 /**
  * Web App entry point for HTTP GET requests.
  * Renders the HTMLService interface with public GIS configuration.

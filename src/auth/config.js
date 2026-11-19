@@ -1,5 +1,3 @@
-/* global PropertiesService, Logger */
-
 /**
  * AuthConfig module
  * Manages configuration resolution for Google Identity Services (GIS).
