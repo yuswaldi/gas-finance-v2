@@ -301,6 +301,65 @@ The DEV synchronization workflow (`.github/workflows/dev-sync.yml`) automates sy
 | `CLASP_DEV_CLASPRC_JSON` (or `CLASPRC_JSON`) | GitHub Secret | Full JSON contents of `~/.clasprc.json` containing OAuth tokens (`access_token`, `refresh_token`, `clientId`, `clientSecret`) for Clasp authentication. |
 | `DEV_SCRIPT_ID` (or `CLASP_DEV_SCRIPT_ID`) | GitHub Secret or Variable | Google Apps Script Script ID for the DEV project (found under Apps Script *Project Settings*). |
 
+### 9.3 Production Deployment Workflow (`deploy-prod.yml`)
+
+The Production deployment workflow (`.github/workflows/deploy-prod.yml`) provides a guarded, manual release mechanism adapted for the GitHub Free Plan:
+
+1. **GitHub Free Plan Adaptation**:
+   - Operates without GitHub Protected Environments, environment required reviewers, or paid approval gates.
+   - Enforces operational safety through strict manual triggers (`workflow_dispatch`), triple-guard branch verification, automated CI gates, and deployment serialization.
+2. **Trigger & Branch Validation**:
+   - Manual execution only via `workflow_dispatch`.
+   - Never triggers automatically on push, merge, or pull request events.
+   - Requires explicit execution confirmation by an authorized maintainer.
+   - **Triple-Layer Branch Guard**:
+     - *Step 1*: Verifies `github.ref == 'refs/heads/main'`; halts immediately if invoked from any other branch.
+     - *Step 2*: Performs checkout explicitly at `refs/heads/main` with `fetch-depth: 0`.
+     - *Step 3*: Verifies the checked-out commit belongs to `origin/main` via `git branch -r --contains`.
+3. **Pre-flight Configuration Verification**:
+   - Validates that `PROD_CLASP_CREDENTIALS`, `PROD_SCRIPT_ID`, and `PROD_DEPLOYMENT_ID` are non-empty and not placeholder values.
+   - Strictly isolated: never falls back to DEV script IDs, DEV credentials, or default values.
+   - Halts immediately before installing Clasp or modifying files if any configuration is missing.
+4. **CI Verification Against Exact Commit**:
+   - Sets up Node.js 20 LTS and installs dependencies.
+   - Executes full CI suite: Apps Script manifest validation, syntax checking, ESLint static analysis, and Node.js unit tests against the exact commit being deployed.
+   - Fails closed: any validation failure aborts the deployment prior to running `clasp push`.
+5. **Runtime Clasp Configuration & Push**:
+   - Installs `@google/clasp@^2.4.2` exclusively in the ephemeral GitHub Actions runner.
+   - Writes credentials to `$HOME/.clasprc.json` with mode `600` and validates JSON structure without logging tokens.
+   - Generates temporary `.clasp.json` containing `PROD_SCRIPT_ID` and `rootDir: "."` with mode `600`.
+   - Executes `clasp push --force` respecting `.claspignore`.
+6. **Preservation of Stable Web App URL**:
+   - Updates the existing deployment using:
+     ```bash
+     clasp deploy -i "$PROD_DEPLOYMENT_ID" -d "$RELEASE_DESCRIPTION"
+     ```
+   - Preserves the stable production Web App URL without generating duplicate deployment IDs.
+   - Never creates a new deployment ID automatically for routine releases.
+7. **Concurrency & Cleanup**:
+   - Concurrency group `production-deploy` with `cancel-in-progress: false` serializes releases and prevents overlapping deployments.
+   - Least privilege GitHub token permissions (`contents: read`).
+   - Unconditional cleanup (`if: always()`) purges `$HOME/.clasprc.json` and `.clasp.json`.
+
+### 9.4 Required Secrets and Variables for Production Deployment
+
+Configured as GitHub repository secrets/variables (not environment secrets):
+
+| Name | Type | Purpose |
+|---|---|---|
+| `PROD_CLASP_CREDENTIALS` (or `PROD_CLASPRC_JSON`) | GitHub Secret | Full JSON contents of `~/.clasprc.json` containing OAuth credentials for the production deployer Google account. |
+| `PROD_SCRIPT_ID` | GitHub Secret or Variable | Google Apps Script Script ID for the Production project. |
+| `PROD_DEPLOYMENT_ID` | GitHub Secret or Variable | Existing stable deployment ID of the Production Web App deployment (ensures URL stability). |
+
+### 9.5 Repository Access Protection & Operational Recommendations
+
+Given the GitHub Free Plan constraint (absence of automated multi-party approval gates):
+- **Access Control**: Restrict repository `Write` and `Admin` permissions to trusted maintainers only.
+- **Branch Protection**: Protect `main` against direct pushes in GitHub repository settings where available; require Pull Requests and passing CI checks before merging.
+- **Code Review**: Conduct thorough code and security reviews on development branches (`dev`/`develop`) before merging to `main`.
+- **Credential Isolation**: Store production credentials exclusively in GitHub Actions Secrets; never expose production secrets to pull request workflows.
+- **Procedural Limitation**: Manual `workflow_dispatch` is an operational procedural check and does not provide the same security guarantees as an automated required-reviewer approval gate. Maintainers must exercise deliberate review prior to dispatching production deployments.
+
 ## 10. Monitoring, backup, and operations
 - Log operational event IDs, function names, duration, outcome, and correlation IDs.
 - Redact tokens, passwords, PII not needed for diagnosis, and financial payloads.

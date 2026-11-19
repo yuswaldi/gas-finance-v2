@@ -23,7 +23,8 @@ family-finance-antigravity/
 ├── .github/
 │   └── workflows/
 │       ├── ci.yml             # GitHub Actions CI workflow (lint, syntax, unit tests)
-│       └── dev-sync.yml       # GitHub Actions DEV sync workflow (runner Clasp push)
+│       ├── dev-sync.yml       # GitHub Actions DEV sync workflow (runner Clasp push)
+│       └── deploy-prod.yml    # GitHub Actions Production deploy workflow (manual, stable URL)
 ├── .gitignore                 # Git ignore rules for secrets and development artifacts
 ├── AGENTS.md                  # Development instructions, boundaries, and AI conventions
 ├── appsscript.json            # Google Apps Script project manifest
@@ -100,6 +101,22 @@ The DEV sync workflow (`.github/workflows/dev-sync.yml`) synchronizes code to Go
 
 1. `CLASP_DEV_CLASPRC_JSON` (or `CLASPRC_JSON`) [Secret]: JSON output of `~/.clasprc.json` after authenticating via `clasp login`.
 2. `DEV_SCRIPT_ID` (or `CLASP_DEV_SCRIPT_ID`) [Secret or Variable]: The Script ID of the DEV Google Apps Script project.
+
+### Production Deployment Workflow (GitHub Free Plan Adapted)
+
+The Production deployment workflow (`.github/workflows/deploy-prod.yml`) provides a guarded, manual release mechanism:
+- **GitHub Free Plan Adaptation**: Does not require GitHub Protected Environments, environment reviewers, or paid approval gates. Security is enforced via manual `workflow_dispatch`, strict branch verification, automated CI gates, and concurrency locks.
+- **Manual Trigger Only**: Can only be triggered manually via `workflow_dispatch`. Rejects execution from branches other than `refs/heads/main`.
+- **Pre-deployment Verification**: Validates production configuration presence (rejects placeholders or DEV fallbacks) and executes full CI verification (manifest validation, syntax, lint, unit tests) against the exact commit before running `clasp push`.
+- **Stable URL Preservation**: Updates the existing production deployment via `clasp deploy -i "$PROD_DEPLOYMENT_ID" -d "$RELEASE_DESCRIPTION"`, preserving the stable Web App URL without generating new deployment IDs.
+- **Concurrency**: Deployments are serialized using the `production-deploy` concurrency group to prevent overlapping runs.
+- **Credential Safety**: Ephemeral credentials in the runner are written to `$HOME/.clasprc.json` with `chmod 600` and purged unconditionally on job completion (`if: always()`).
+
+#### Required GitHub Secrets & Variables for Production Deployment
+
+1. `PROD_CLASP_CREDENTIALS` (or `PROD_CLASPRC_JSON`) [Secret]: Full JSON contents of `~/.clasprc.json` for the production deployer Google account.
+2. `PROD_SCRIPT_ID` [Secret or Variable]: The Script ID of the Production Google Apps Script project.
+3. `PROD_DEPLOYMENT_ID` [Secret or Variable]: The existing stable Deployment ID of the Production Web App.
 
 ## 5. Security & Financial Correctness Invariants
 

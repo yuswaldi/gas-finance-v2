@@ -1,0 +1,181 @@
+name: Production Deploy (Clasp)
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_description:
+        description: 'Release description / version notes for Apps Script deployment'
+        required: false
+        type: string
+        default: 'Production deployment via GitHub Actions'
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-prod:
+    name: Validate and Deploy to Production
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Validate branch is main
+        run: |
+          echo "Checking workflow trigger reference: ${{ github.ref }}"
+          if [ "${{ github.ref }}" != "refs/heads/main" ]; then
+            echo "::error::Production deployment is strictly restricted to refs/heads/main. Current ref is '${{ github.ref }}'."
+            exit 1
+          fi
+          echo "✓ Workflow ref is refs/heads/main"
+
+      - name: Checkout repository at exact ref
+        uses: actions/checkout@v4
+        with:
+          ref: refs/heads/main
+          fetch-depth: 0
+
+      - name: Verify commit belongs to main branch
+        run: |
+          CURRENT_COMMIT=$(git rev-parse HEAD)
+          echo "Checked out commit: $CURRENT_COMMIT"
+          if ! git branch -r --contains "$CURRENT_COMMIT" | grep -q "origin/main"; then
+            echo "::error::Checked-out commit $CURRENT_COMMIT does not belong to origin/main branch."
+            exit 1
+          fi
+          echo "✓ Checked out commit is verified on origin/main"
+
+      - name: Validate production secrets and configuration presence
+        env:
+          PROD_CREDENTIALS: ${{ secrets.PROD_CLASP_CREDENTIALS || secrets.PROD_CLASPRC_JSON }}
+          PROD_SCRIPT_ID: ${{ secrets.PROD_SCRIPT_ID || vars.PROD_SCRIPT_ID }}
+          PROD_DEPLOYMENT_ID: ${{ secrets.PROD_DEPLOYMENT_ID || vars.PROD_DEPLOYMENT_ID }}
+        run: |
+          FAILED=0
+          if [ -z "$PROD_CREDENTIALS" ]; then
+            echo "::error::Missing PROD_CLASP_CREDENTIALS secret. Please configure it in repository secrets."
+            FAILED=1
+          fi
+          if [ -z "$PROD_SCRIPT_ID" ]; then
+            echo "::error::Missing PROD_SCRIPT_ID. Please configure it in repository secrets or variables."
+            FAILED=1
+          fi
+          if [ -z "$PROD_DEPLOYMENT_ID" ]; then
+            echo "::error::Missing PROD_DEPLOYMENT_ID. Please configure existing stable deployment ID in repository secrets or variables."
+            FAILED=1
+          fi
+          if [ "$PROD_SCRIPT_ID" = "YOUR_DEV_SCRIPT_ID" ] || [ "$PROD_SCRIPT_ID" = "YOUR_PROD_SCRIPT_ID" ] || [ "$PROD_SCRIPT_ID" = "placeholder" ]; then
+            echo "::error::PROD_SCRIPT_ID contains an invalid placeholder value."
+            FAILED=1
+          fi
+          if [ "$PROD_DEPLOYMENT_ID" = "YOUR_DEPLOYMENT_ID" ] || [ "$PROD_DEPLOYMENT_ID" = "placeholder" ]; then
+            echo "::error::PROD_DEPLOYMENT_ID contains an invalid placeholder value."
+            FAILED=1
+          fi
+          if [ $FAILED -ne 0 ]; then
+            echo "::error::Production pre-flight configuration validation failed. Stopping before any deployment steps."
+            exit 1
+          fi
+          echo "✓ Production configuration presence verified (non-empty, non-placeholder)"
+
+      - name: Set up Node.js LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install CI dependencies
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            npm install
+          fi
+
+      - name: Validate Apps Script manifest JSON
+        run: |
+          node -e "
+            const manifest = JSON.parse(require('fs').readFileSync('appsscript.json', 'utf8'));
+            if (!manifest.timeZone || !manifest.runtimeVersion) {
+              console.error('Missing mandatory fields in appsscript.json');
+              process.exit(1);
+            }
+            console.log('✓ appsscript.json is valid JSON with required runtime settings');
+          "
+
+      - name: Validate JavaScript and Apps Script syntax
+        run: npm run syntax:check
+
+      - name: Run linter
+        run: npm run lint
+
+      - name: Run unit tests
+        run: npm test
+
+      - name: Install Clasp in runner
+        run: |
+          npm install -g @google/clasp@^2.4.2
+          clasp --version
+
+      - name: Configure Production Clasp authentication
+        env:
+          PROD_CREDENTIALS: ${{ secrets.PROD_CLASP_CREDENTIALS || secrets.PROD_CLASPRC_JSON }}
+        run: |
+          mkdir -p "$HOME"
+          printf '%s\n' "$PROD_CREDENTIALS" > "$HOME/.clasprc.json"
+          chmod 600 "$HOME/.clasprc.json"
+          node -e "
+            try {
+              const creds = JSON.parse(require('fs').readFileSync(process.env.HOME + '/.clasprc.json', 'utf8'));
+              if (!creds.token && !creds.refresh_token) {
+                console.warn('::warning::Production Clasp credentials JSON does not contain standard token structure.');
+              }
+              console.log('✓ Production Clasp credentials JSON verified and configured in home directory');
+            } catch (err) {
+              console.error('::error::Failed to parse production Clasp credentials as JSON. Ensure the secret contains valid JSON.');
+              process.exit(1);
+            }
+          "
+
+      - name: Generate Production .clasp.json
+        env:
+          SCRIPT_ID: ${{ secrets.PROD_SCRIPT_ID || vars.PROD_SCRIPT_ID }}
+        run: |
+          node -e "
+            const fs = require('fs');
+            const scriptId = process.env.SCRIPT_ID.trim();
+            const config = {
+              scriptId: scriptId,
+              rootDir: '.'
+            };
+            fs.writeFileSync('.clasp.json', JSON.stringify(config, null, 2) + '\n');
+          "
+          chmod 600 .clasp.json
+          echo "✓ Generated temporary .clasp.json for production deployment"
+
+      - name: Push source to Google Apps Script Production project
+        run: |
+          echo "Pushing verified project files to production Google Apps Script..."
+          clasp push --force
+          echo "✓ Successfully pushed source code to production project"
+
+      - name: Deploy to existing stable Production deployment ID
+        env:
+          DEPLOYMENT_ID: ${{ secrets.PROD_DEPLOYMENT_ID || vars.PROD_DEPLOYMENT_ID }}
+          DESCRIPTION_INPUT: ${{ github.event.inputs.release_description }}
+        run: |
+          CLEAN_DEPLOYMENT_ID=$(echo "$DEPLOYMENT_ID" | tr -d '[:space:]')
+          COMMIT_HASH=$(git rev-parse --short HEAD)
+          RELEASE_DESC="${DESCRIPTION_INPUT:-Production release} (${COMMIT_HASH})"
+          echo "Redeploying to existing deployment ID: $CLEAN_DEPLOYMENT_ID"
+          clasp deploy -i "$CLEAN_DEPLOYMENT_ID" -d "$RELEASE_DESC"
+          echo "✓ Production deployment successfully updated for stable deployment ID"
+
+      - name: Clean up temporary credentials and configuration
+        if: always()
+        run: |
+          rm -f "$HOME/.clasprc.json"
+          rm -f .clasp.json
+          echo "✓ Cleaned up temporary credentials and .clasp.json"

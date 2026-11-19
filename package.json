@@ -6,7 +6,7 @@
   "scripts": {
     "lint": "eslint --ext .js,.gs --no-error-on-unmatched-pattern src/",
     "syntax:check": "node scripts/check-syntax.js",
-    "test": "node --test tests/**/*.test.js",
+    "test": "node --test tests",
     "ci": "npm run syntax:check && npm run lint && npm run test"
   },
   "devDependencies": {
