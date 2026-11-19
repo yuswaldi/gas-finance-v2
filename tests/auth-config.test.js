@@ -52,7 +52,8 @@ test('AuthConfig.getPublicConfig exposes only public configuration', () => {
     SOME_SECRET_KEY: 'super-secret-value'
   });
   const publicConfig = authConfig.getPublicConfig();
-  assert.deepStrictEqual(publicConfig, {
+  // Clone VM context object into host context to avoid cross-realm prototype mismatch in deepStrictEqual
+  assert.deepStrictEqual({ ...publicConfig }, {
     gisClientId: 'public-client-id.apps.googleusercontent.com'
   });
   assert.strictEqual(publicConfig.SOME_SECRET_KEY, undefined);

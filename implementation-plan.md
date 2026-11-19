@@ -73,6 +73,7 @@ Tasks:
 
 *Note on FFM-006 status:* Implementation and static unit tests completed. Live browser verification against deployed DEV Web App is pending post-push deployment and OAuth origin configuration.
 *Note on CI linter fix:* Resolved ESLint `no-redeclare` errors and `no-unused-vars` warnings for Apps Script global scope by updating `.eslintrc.json` (`vars: local`, `node: false` for `src/`) and removing redundant inline `/* global ... */` directives in `src/auth/config.js` and `src/ui/webapp.js`.
+*Note on CI unit test fix:* Resolved cross-realm prototype assertion error in `tests/auth-config.test.js` where `assert.deepStrictEqual` compared Node.js VM context object prototype with host context prototype.
 
 Exit criteria:
 - Both users can log in reliably.
