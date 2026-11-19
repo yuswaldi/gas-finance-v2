@@ -19,7 +19,8 @@
     "PropertiesService": "readonly",
     "HtmlService": "readonly",
     "CacheService": "readonly",
-    "ScriptApp": "readonly"
+    "ScriptApp": "readonly",
+    "AuthConfig": "readonly"
   },
   "rules": {
     "no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }],

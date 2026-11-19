@@ -54,15 +54,31 @@ flowchart TD
 The Web App executes as the deployer. For personal Gmail accounts, Apps Script may not expose the accessing user's email in this deployment context. `Session.getActiveUser().getEmail()` must not be treated as the primary identity mechanism.
 
 ### 3.2 Browser login
-- Configure a Google OAuth 2.0 Web application client ID.
-- Configure authorized JavaScript origins required by the actual HtmlService deployment.
-- Load Google Identity Services in the HTMLService page.
-- Obtain a short-lived Google ID token (credential).
-- Do not treat the decoded browser payload as trusted.
-- Send the ID token to an Apps Script server function through `google.script.run`.
-- Do not store the Google ID token in Sheets, logs, URLs, or localStorage.
+- Configure a Google OAuth 2.0 Web application client ID in Google Cloud Console.
+- Configure authorized JavaScript origins required by the actual HtmlService deployment (typically the sandbox origin displayed on the diagnostic card, such as `https://<script-id>.script.googleusercontent.com` or `https://script.google.com`).
+- Store the Web Client ID in Apps Script Script Properties as `GIS_CLIENT_ID` (or `GOOGLE_OAUTH_CLIENT_ID`). Never hardcode or commit OAuth Client IDs or secrets.
+- Load Google Identity Services client library in the HTMLService page (`https://accounts.google.com/gsi/client`).
+- Inject public configuration into HtmlService template at runtime via `src/ui/webapp.js` (`doGet`).
+- Render the official Google Sign-In button using `google.accounts.id.renderButton`.
+- Receive the credential response via the GIS JavaScript client callback (`handleCredentialResponse`).
+- Do not treat the decoded browser payload as trusted proof of identity.
+- Do not log, display in DOM, or persist the ID token in `localStorage`, `sessionStorage`, `cookies`, or Google Sheets.
+- Display a clear, safe success message indicating receipt of the credential response, accompanied by an explicit notice that frontend credential receipt does NOT constitute application authentication.
 
 Important deployment validation: HtmlService runs in a sandboxed iframe and GIS origin behavior must be tested against the actual deployed URL. Do not assume that adding the script URL as an OAuth origin is sufficient. Complete a proof-of-concept login with both Gmail accounts before implementing the rest of the app.
+
+#### 3.2.1 FFM-006 Proof of Concept Scope & Boundaries
+The FFM-006 implementation verifies that:
+1. The HtmlService page correctly loads in Apps Script.
+2. The GIS client library initializes and renders the Google Sign-In button.
+3. The browser callback receives a Google ID credential response upon user sign-in.
+
+**Security Boundaries & Exclusions:**
+- **No Server-Side Verification:** Token signature, audience (`aud`), issuer (`iss`), expiration (`exp`), and email verification claims are not yet validated.
+- **No Replay Protection:** Server-issued login nonces are not yet implemented (scheduled for FFM-007).
+- **No Allowlist Authorization:** The user allowlist restricting access to the two registered Google `sub` accounts is not yet enforced (scheduled for FFM-009).
+- **No Application Sessions:** Session token issuance, storage, and validation are not yet active (scheduled for FFM-010).
+- Receiving a GIS credential in this proof of concept does **NOT** grant access or authenticate the user into the application.
 
 ### 3.3 Server-side verification using Google's tokeninfo endpoint
 Apps Script calls:

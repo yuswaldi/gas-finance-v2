@@ -61,15 +61,17 @@ Exit criteria:
 
 ### Phase 1 — Authentication proof of concept (GO/NO-GO)
 Tasks:
-1. Create OAuth Web Client ID for GIS.
-2. Configure GIS in HtmlService.
-3. Create server-issued one-time nonce.
-4. Implement Apps Script tokeninfo verification.
-5. Validate `aud`, `iss`, `exp`, `iat`, `email_verified`, `sub`, and nonce.
-6. Create allowlist for the two Gmail identities using verified Google `sub`.
-7. Test both Gmail accounts in actual deployed DEV Web App.
-8. Test expired, malformed, wrong-audience, wrong-nonce, replayed-nonce, unverified-email, and disabled-user cases.
-9. Record tokeninfo endpoint dependency, failure behavior, and latency.
+- [x] 1. Create OAuth Web Client ID for GIS (configured via Script Properties `GIS_CLIENT_ID`). (FFM-006)
+- [x] 2. Configure GIS in HtmlService (`src/ui/webapp.js`, `src/ui/index.html`). (FFM-006)
+- [ ] 3. Create server-issued one-time nonce. (FFM-007)
+- [ ] 4. Implement Apps Script tokeninfo verification. (FFM-008)
+- [ ] 5. Validate `aud`, `iss`, `exp`, `iat`, `email_verified`, `sub`, and nonce. (FFM-008)
+- [ ] 6. Create allowlist for the two Gmail identities using verified Google `sub`. (FFM-009)
+- [ ] 7. Test both Gmail accounts in actual deployed DEV Web App. (FFM-006 / FFM-009)
+- [ ] 8. Test expired, malformed, wrong-audience, wrong-nonce, replayed-nonce, unverified-email, and disabled-user cases.
+- [ ] 9. Record tokeninfo endpoint dependency, failure behavior, and latency.
+
+*Note on FFM-006 status:* Implementation and static unit tests completed. Live browser verification against deployed DEV Web App is pending post-push deployment and OAuth origin configuration.
 
 Exit criteria:
 - Both users can log in reliably.
@@ -233,7 +235,7 @@ Use one task per independently reviewable unit. Suggested IDs:
 | FFM-003 | Add GitHub Actions CI with Node.js and test tooling | Completed |
 | FFM-004 | Add GitHub Actions DEV sync using Clasp (runner only) | Completed |
 | FFM-005 | Add protected production deployment using Clasp (runner only) | Completed |
-| FFM-006 | Create GIS HtmlService proof of concept | Pending |
+| FFM-006 | Create GIS HtmlService proof of concept | Completed |
 | FFM-007 | Implement server-issued login nonce | Pending |
 | FFM-008 | Implement tokeninfo verification and claim validation | Pending |
 | FFM-009 | Seed allowlisted Google identities | Pending |

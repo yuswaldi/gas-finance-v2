@@ -38,12 +38,16 @@ family-finance-antigravity/
 │   └── check-syntax.js
 ├── src/                       # Application source tree (Google Apps Script)
 │   ├── auth/                  # Authentication, session management, and GIS tokeninfo verification
+│   │   └── config.js          # GIS client configuration helper
 │   ├── common/                # Shared utilities, constants, error handling, and response models
 │   ├── database/              # Schema registry, migrations, repositories, and batch I/O
 │   ├── finance/               # Ledger engine, accounts, categories, transactions, budgets, bills
 │   ├── jobs/                  # Time-driven triggers, reconciliation, and maintenance jobs
 │   └── ui/                    # HTMLService templates, styles, and client-side logic
+│       ├── index.html         # GIS sign-in interface and diagnostics UI
+│       └── webapp.js          # Web App doGet entry point
 └── tests/                     # CI unit test specs (executed via node:test in GitHub Actions)
+    ├── auth-config.test.js    # AuthConfig unit tests
     └── ci-baseline.test.js
 ```
 
