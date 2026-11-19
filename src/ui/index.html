@@ -2,32 +2,26 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Personal & Family Finance Manager</title>
+  <title>Personal &amp; Family Finance Manager</title>
   <style>
     :root {
-      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      --bg-color: #f8fafc;
-      --card-bg: #ffffff;
-      --text-main: #0f172a;
-      --text-muted: #64748b;
-      --border-color: #e2e8f0;
-      --primary-color: #2563eb;
-      --primary-hover: #1d4ed8;
-      --success-bg: #f0fdf4;
-      --success-border: #bbf7d0;
-      --success-text: #166534;
-      --warning-bg: #fffbeb;
-      --warning-border: #fde68a;
-      --warning-text: #92400e;
-      --error-bg: #fef2f2;
-      --error-border: #fecaca;
-      --error-text: #991b1b;
-      --info-bg: #f0f9ff;
-      --info-border: #bae6fd;
-      --info-text: #075985;
-      --radius: 8px;
-      --shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+      --bg-color: #0f172a;
+      --card-bg: #1e293b;
+      --card-border: #334155;
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success-bg: #064e3b;
+      --success-text: #6ee7b7;
+      --success-border: #059669;
+      --error-bg: #450a0a;
+      --error-text: #fca5a5;
+      --error-border: #dc2626;
+      --warning-bg: #451a03;
+      --warning-text: #fcd34d;
+      --warning-border: #d97706;
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     }
 
     * {
@@ -37,447 +31,339 @@
     }
 
     body {
-      font-family: var(--font-family);
       background-color: var(--bg-color);
       color: var(--text-main);
-      line-height: 1.5;
-      padding: 1.5rem;
+      font-family: var(--font-family);
+      min-height: 100vh;
       display: flex;
       flex-direction: column;
       align-items: center;
-      min-height: 100vh;
+      justify-content: center;
+      padding: 1.5rem;
     }
 
     .container {
       width: 100%;
-      max-width: 680px;
+      max-width: 580px;
       display: flex;
       flex-direction: column;
-      gap: 1.5rem;
+      gap: 1.25rem;
     }
 
-    header {
+    .header {
       text-align: center;
-      padding-bottom: 0.5rem;
     }
 
-    header h1 {
-      font-size: 1.5rem;
+    .header h1 {
+      font-size: 1.6rem;
       font-weight: 700;
       color: var(--text-main);
+      margin-bottom: 0.35rem;
     }
 
-    header p {
+    .header p {
+      font-size: 0.95rem;
       color: var(--text-muted);
-      font-size: 0.875rem;
-      margin-top: 0.25rem;
     }
 
     .card {
-      background: var(--card-bg);
-      border: 1px solid var(--border-color);
-      border-radius: var(--radius);
-      box-shadow: var(--shadow);
-      padding: 1.5rem;
+      background-color: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 0.75rem;
+      padding: 1.75rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
     }
 
     .card-title {
-      font-size: 1.125rem;
+      font-size: 1.2rem;
       font-weight: 600;
       margin-bottom: 0.75rem;
       display: flex;
       align-items: center;
-      justify-content: space-between;
-    }
-
-    .badge {
-      font-size: 0.75rem;
-      font-weight: 600;
-      padding: 0.2rem 0.5rem;
-      border-radius: 9999px;
-      background-color: #e2e8f0;
-      color: #334155;
-    }
-
-    .badge-poc {
-      background-color: #dbeafe;
-      color: #1e40af;
-    }
-
-    .status-box {
-      border-radius: var(--radius);
-      padding: 1rem;
-      font-size: 0.875rem;
-      margin-top: 1rem;
-      display: flex;
-      flex-direction: column;
       gap: 0.5rem;
     }
 
-    .status-success {
+    .card-desc {
+      font-size: 0.92rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 1.25rem;
+    }
+
+    .alert {
+      border-radius: 0.5rem;
+      padding: 1rem;
+      margin-bottom: 1.25rem;
+      font-size: 0.9rem;
+      line-height: 1.45;
+    }
+
+    .alert-success {
       background-color: var(--success-bg);
       border: 1px solid var(--success-border);
       color: var(--success-text);
     }
 
-    .status-warning {
-      background-color: var(--warning-bg);
-      border: 1px solid var(--warning-border);
-      color: var(--warning-text);
-    }
-
-    .status-error {
+    .alert-error {
       background-color: var(--error-bg);
       border: 1px solid var(--error-border);
       color: var(--error-text);
     }
 
-    .status-info {
-      background-color: var(--info-bg);
-      border: 1px solid var(--info-border);
-      color: var(--info-text);
+    .alert-warning {
+      background-color: var(--warning-bg);
+      border: 1px solid var(--warning-border);
+      color: var(--warning-text);
     }
 
-    .loading-spinner {
-      display: inline-block;
-      width: 1.5rem;
-      height: 1.5rem;
-      border: 2px solid #cbd5e1;
-      border-radius: 50%;
-      border-top-color: var(--primary-color);
-      animation: spin 0.8s linear infinite;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-
-    .loading-container {
-      display: flex;
+    .btn {
+      display: inline-flex;
       align-items: center;
-      gap: 0.75rem;
-      color: var(--text-muted);
-      font-size: 0.875rem;
-      padding: 1rem 0;
-    }
-
-    .btn-container {
-      margin: 1rem 0;
-      display: flex;
       justify-content: center;
-      min-height: 44px;
+      gap: 0.6rem;
+      width: 100%;
+      padding: 0.85rem 1.25rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      border-radius: 0.5rem;
+      text-decoration: none;
+      cursor: pointer;
+      transition: background-color 0.15s ease, transform 0.05s ease;
+      border: none;
     }
 
-    .code-snippet {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-      font-size: 0.8rem;
-      background-color: #f1f5f9;
-      padding: 0.2rem 0.4rem;
-      border-radius: 4px;
-      word-break: break-all;
+    .btn:active {
+      transform: scale(0.99);
     }
 
-    .diagnostic-table {
+    .btn-google {
+      background-color: #ffffff;
+      color: #1f2937;
+      border: 1px solid #d1d5db;
+    }
+
+    .btn-google:hover {
+      background-color: #f3f4f6;
+    }
+
+    .btn-primary {
+      background-color: var(--primary);
+      color: #ffffff;
+    }
+
+    .btn-primary:hover {
+      background-color: var(--primary-hover);
+    }
+
+    .btn-secondary {
+      background-color: #334155;
+      color: #f8fafc;
+    }
+
+    .btn-secondary:hover {
+      background-color: #475569;
+    }
+
+    .btn-google svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .notice-box {
+      background-color: rgba(15, 23, 42, 0.6);
+      border-left: 3px solid var(--primary);
+      padding: 0.85rem 1rem;
+      border-radius: 0.35rem;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.45;
+      margin-top: 1rem;
+    }
+
+    .notice-box strong {
+      color: var(--text-main);
+    }
+
+    .diag-table {
       width: 100%;
       border-collapse: collapse;
-      font-size: 0.8125rem;
-      margin-top: 0.5rem;
+      font-size: 0.82rem;
+      margin-top: 0.75rem;
     }
 
-    .diagnostic-table td {
-      padding: 0.4rem 0.5rem;
-      border-bottom: 1px solid var(--border-color);
+    .diag-table td {
+      padding: 0.45rem 0.6rem;
+      border-bottom: 1px solid #334155;
       vertical-align: top;
     }
 
-    .diagnostic-table td:first-child {
-      font-weight: 600;
+    .diag-table td:first-child {
       color: var(--text-muted);
-      width: 38%;
+      width: 40%;
+      font-weight: 500;
     }
 
-    ul.security-checklist {
-      list-style-type: none;
-      font-size: 0.8125rem;
+    .diag-table td:last-child {
+      color: var(--text-main);
+      font-family: monospace;
+      word-break: break-all;
+    }
+
+    .code-box {
+      font-family: monospace;
+      font-size: 0.85rem;
+      background: #0f172a;
+      padding: 0.5rem 0.75rem;
+      border-radius: 0.35rem;
+      border: 1px solid #334155;
+      margin: 0.5rem 0;
+      word-break: break-all;
+    }
+
+    .footer {
+      text-align: center;
+      font-size: 0.8rem;
       color: var(--text-muted);
-      display: flex;
-      flex-direction: column;
-      gap: 0.35rem;
       margin-top: 0.5rem;
     }
-
-    ul.security-checklist li {
-      display: flex;
-      align-items: flex-start;
-      gap: 0.5rem;
-    }
-
-    ul.security-checklist li::before {
-      content: "•";
-      color: var(--text-muted);
-      font-weight: bold;
-    }
-
-    .hidden {
-      display: none !important;
-    }
   </style>
-  <!-- Google Identity Services JavaScript client library -->
-  <script src="https://accounts.google.com/gsi/client" async defer></script>
 </head>
 <body>
   <div class="container">
-    <header>
-      <h1>Personal & Family Finance Manager</h1>
-      <p>Google Identity Services (GIS) — Frontend Proof of Concept</p>
-    </header>
+    <div class="header">
+      <h1>Personal &amp; Family Finance Manager</h1>
+      <p>Google OAuth 2.0 Authorization Code Flow — PoC</p>
+    </div>
 
-    <!-- Sign-In Interface Card -->
-    <section class="card" aria-labelledby="signin-title">
-      <div class="card-title" id="signin-title">
-        <span>Sign-In Verification</span>
-        <span class="badge badge-poc">FFM-006 PoC</span>
-      </div>
+    <!-- VIEW 1: LOGIN VIEW -->
+    <? if (viewState === 'login') { ?>
+      <div class="card">
+        <h2 class="card-title">Sign In</h2>
+        <p class="card-desc">
+          Sign in using an authorized Google personal account to access your household finances.
+        </p>
 
-      <!-- Loading State -->
-      <div id="gis-loading" class="loading-container" role="status">
-        <span class="loading-spinner" aria-hidden="true"></span>
-        <span>Loading Google Identity Services client library...</span>
-      </div>
+        <? if (!clientIdConfigured) { ?>
+          <div class="alert alert-warning">
+            <strong>Configuration Required:</strong><br>
+            <code>OAUTH_CLIENT_ID</code> is not configured in Apps Script Script Properties.
+            <ol style="margin-left: 1.25rem; margin-top: 0.5rem;">
+              <li>Open Apps Script Editor &gt; Project Settings &gt; Script Properties.</li>
+              <li>Add property <code>OAUTH_CLIENT_ID</code> with your Google OAuth 2.0 Web Client ID.</li>
+              <li>Add this redirect URI to Google Cloud Console Authorized redirect URIs:</li>
+            </ol>
+            <div class="code-box"><?= redirectUri ? redirectUri : '(Deploy as Web App to resolve URI)' ?></div>
+          </div>
+        <? } else { ?>
+          <a id="btnLogin" href="<?= authUrl ?>" target="_top" class="btn btn-google">
+            <svg viewBox="0 0 24 24">
+              <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+              <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+              <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+              <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+            </svg>
+            Sign in with Google
+          </a>
+        <? } ?>
 
-      <!-- Missing Client ID Warning State -->
-      <div id="gis-missing-config" class="status-box status-warning hidden" role="alert">
-        <strong>Google OAuth Client ID Not Configured</strong>
-        <p>No valid Client ID was found in Google Apps Script Script Properties. To enable the sign-in button:</p>
-        <ol style="margin-left: 1.25rem; margin-top: 0.25rem;">
-          <li>Open Apps Script <em>Project Settings</em> → <em>Script Properties</em>.</li>
-          <li>Add property <code>GIS_CLIENT_ID</code> (or <code>GOOGLE_OAUTH_CLIENT_ID</code>) with your OAuth 2.0 Web Client ID.</li>
-          <li>Reload this page.</li>
-        </ol>
-      </div>
-
-      <!-- GIS Initialization Error State -->
-      <div id="gis-error" class="status-box status-error hidden" role="alert">
-        <strong>Google Identity Services Initialization Failed</strong>
-        <p id="gis-error-message">Unable to load the Google Identity Services library. Please check your network connection and ensure third-party scripts from <code>accounts.google.com</code> are permitted.</p>
-      </div>
-
-      <!-- Google Sign-In Button Container -->
-      <div id="gis-button-wrapper" class="btn-container hidden">
-        <div id="google-signin-btn"></div>
-      </div>
-
-      <!-- Successful Credential Receipt Notification -->
-      <div id="gis-success" class="status-box status-success hidden" role="status">
-        <strong style="display: flex; align-items: center; gap: 0.5rem;">
-          <span>✓</span> GIS Credential Response Received
-        </strong>
-        <p>A Google ID credential response was successfully received by the client-side JavaScript callback.</p>
-        <p><small id="gis-success-timestamp"></small></p>
-        <div style="margin-top: 0.5rem; padding-top: 0.5rem; border-top: 1px dashed var(--success-border); font-size: 0.75rem;">
-          <strong>Security Notice:</strong>
-          Receiving a GIS credential response in the browser does <em>NOT</em> mean the user has been authenticated by this application.
-          Server-side token verification, nonce validation, Google <code>sub</code> allowlisting, and session token creation are not yet implemented.
-          (The raw credential was neither logged, displayed, nor persisted).
+        <div class="notice-box">
+          <strong>Notice:</strong> This application serves exactly one household with two registered personal Gmail users. Browser identity claims are not trusted.
         </div>
       </div>
-    </section>
+    <? } ?>
 
-    <!-- Diagnostics & Configuration Helper Card -->
-    <section class="card" aria-labelledby="diag-title">
-      <div class="card-title" id="diag-title">
-        <span>Environment & Diagnostics</span>
-        <span class="badge">DEV Setup</span>
+    <!-- VIEW 2: CALLBACK SUCCESS VIEW -->
+    <? if (viewState === 'callback_success') { ?>
+      <div class="card">
+        <h2 class="card-title" style="color: var(--success-text);">
+          <span>✓</span> OAuth Authorization Code Received
+        </h2>
+        <div class="alert alert-success">
+          <strong>Proof of Concept Succeeded:</strong><br>
+          The browser completed the Google OAuth 2.0 redirect flow and returned to Google Apps Script.
+          The server-side state token was validated and consumed.
+        </div>
+
+        <div class="notice-box" style="border-left-color: #10b981;">
+          <strong>Task Boundary Notice (FFM-006):</strong><br>
+          <?= pocNotice ?><br><br>
+          In accordance with task boundaries:
+          <ul style="margin-left: 1.25rem; margin-top: 0.35rem;">
+            <li>The authorization code has <strong>NOT</strong> been exchanged for tokens (FFM-008).</li>
+            <li>No application session has been issued (FFM-010).</li>
+            <li>No data has been read or written.</li>
+          </ul>
+        </div>
+
+        <div style="margin-top: 1.25rem;">
+          <a href="<?= redirectUri ?>" target="_top" class="btn btn-secondary">Test Sign-In Again</a>
+        </div>
       </div>
-      <p style="font-size: 0.8125rem; color: var(--text-muted);">
-        Use these runtime details when configuring Authorized JavaScript origins in the Google Cloud Console.
-      </p>
+    <? } ?>
 
-      <table class="diagnostic-table">
-        <tbody>
-          <tr>
-            <td>Execution Origin</td>
-            <td><code id="diag-origin" class="code-snippet">Detecting...</code></td>
-          </tr>
-          <tr>
-            <td>Script Client ID</td>
-            <td><code id="diag-client-id" class="code-snippet">Checking...</code></td>
-          </tr>
-          <tr>
-            <td>GIS Library Status</td>
-            <td><span id="diag-gis-status">Waiting for library...</span></td>
-          </tr>
-        </tbody>
+    <!-- VIEW 3: ERROR VIEW -->
+    <? if (viewState === 'error') { ?>
+      <div class="card">
+        <h2 class="card-title" style="color: var(--error-text);">
+          <span>✗</span> OAuth Authorization Error
+        </h2>
+        <div class="alert alert-error">
+          <strong>Error [<?= errorCode ?>]:</strong><br>
+          <?= errorMessage ?>
+        </div>
+
+        <div style="margin-top: 1.25rem;">
+          <a href="<?= redirectUri ?>" target="_top" class="btn btn-primary">Return to Sign-In</a>
+        </div>
+      </div>
+    <? } ?>
+
+    <!-- DIAGNOSTICS CARD -->
+    <div class="card" style="padding: 1.25rem;">
+      <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--text-muted); margin-bottom: 0.5rem;">
+        Deployment Diagnostics
+      </h3>
+      <table class="diag-table">
+        <tr>
+          <td>Client ID</td>
+          <td><?= clientIdConfigured ? (clientId.substring(0, 16) + '...apps.googleusercontent.com') : '<span style="color:#f87171;">Not Configured</span>' ?></td>
+        </tr>
+        <tr>
+          <td>Redirect URI</td>
+          <td><?= redirectUriConfigured ? redirectUri : '<span style="color:#f87171;">Unresolved</span>' ?></td>
+        </tr>
+        <tr>
+          <td>OAuth Flow</td>
+          <td>Authorization Code Flow (response_type=code)</td>
+        </tr>
+        <tr>
+          <td>Requested Scopes</td>
+          <td>openid email profile</td>
+        </tr>
+        <tr>
+          <td>View State</td>
+          <td><?= viewState ?></td>
+        </tr>
       </table>
+    </div>
 
-      <div class="status-box status-info" style="margin-top: 1rem;">
-        <strong>Authorized JavaScript Origin Setup:</strong>
-        <p>If Google displays <em>"The given origin is not allowed for the given client ID"</em>, add the <strong>Execution Origin</strong> shown above to <strong>Authorized JavaScript origins</strong> in your OAuth 2.0 Web Client ID settings.</p>
-      </div>
-    </section>
-
-    <!-- Security Boundaries Card -->
-    <section class="card" aria-labelledby="sec-title">
-      <div class="card-title" id="sec-title">
-        <span>Phase 1 Scope & Boundaries</span>
-      </div>
-      <p style="font-size: 0.8125rem; color: var(--text-muted);">
-        This task (FFM-006) is strictly a frontend proof of concept. The following security controls are pending subsequent delivery phases:
-      </p>
-      <ul class="security-checklist">
-        <li><strong>FFM-007:</strong> Server-issued login nonces to protect against token replay attacks.</li>
-        <li><strong>FFM-008:</strong> Server-side <code>tokeninfo</code> claim verification (<code>aud</code>, <code>iss</code>, <code>exp</code>, <code>email_verified</code>, <code>sub</code>).</li>
-        <li><strong>FFM-009:</strong> Restricting access to registered Google <code>sub</code> allowlisted identities.</li>
-        <li><strong>FFM-010:</strong> Cryptographically random server application session tokens (SHA-256 hashed).</li>
-        <li><strong>FFM-011:</strong> Session expiration, idle timeout, and explicit revocation.</li>
-        <li><strong>FFM-012:</strong> Household context resolution and OWNER / PARTNER authorization.</li>
-      </ul>
-    </section>
+    <div class="footer">
+      Google Apps Script V8 &bull; HtmlService &bull; Zero Runtime Frontend Dependencies
+    </div>
   </div>
 
   <script>
-    // Configuration safely injected by Apps Script server template
-    window.APP_CONFIG = {
-      gisClientId: <?!= JSON.stringify(gisClientId || '') ?>
-    };
-
+    // Ensure top-level navigation on button click
     (function() {
-      'use strict';
-
-      var loadingEl = document.getElementById('gis-loading');
-      var missingConfigEl = document.getElementById('gis-missing-config');
-      var errorEl = document.getElementById('gis-error');
-      var errorMessageEl = document.getElementById('gis-error-message');
-      var btnWrapperEl = document.getElementById('gis-button-wrapper');
-      var successEl = document.getElementById('gis-success');
-      var successTimestampEl = document.getElementById('gis-success-timestamp');
-      var diagOriginEl = document.getElementById('diag-origin');
-      var diagClientIdEl = document.getElementById('diag-client-id');
-      var diagGisStatusEl = document.getElementById('diag-gis-status');
-
-      // Populate diagnostics
-      var currentOrigin = window.location.origin || (window.location.protocol + '//' + window.location.host);
-      if (diagOriginEl) diagOriginEl.textContent = currentOrigin;
-
-      var rawClientId = window.APP_CONFIG.gisClientId || '';
-      if (diagClientIdEl) {
-        if (!rawClientId) {
-          diagClientIdEl.textContent = '(Not configured in Script Properties)';
-        } else {
-          // Mask client ID for privacy in diagnostics display
-          var parts = rawClientId.split('.');
-          var masked = rawClientId.length > 16
-            ? rawClientId.substring(0, 12) + '...' + (parts.length > 1 ? parts[parts.length - 1] : '')
-            : rawClientId;
-          diagClientIdEl.textContent = masked;
-        }
-      }
-
-      /**
-       * Callback invoked by Google Identity Services when user successfully selects an account.
-       * Strictly fulfills security rules: does NOT log, display, persist, or transmit unverified tokens.
-       *
-       * @param {Object} response - Credential response from GIS.
-       */
-      function handleCredentialResponse(response) {
-        if (!response || !response.credential) {
-          showError('GIS returned an empty or invalid credential response.');
-          return;
-        }
-
-        // Hide button, display safe success notification
-        if (btnWrapperEl) btnWrapperEl.classList.add('hidden');
-        if (successEl) successEl.classList.remove('hidden');
-        if (successTimestampEl) {
-          successTimestampEl.textContent = 'Response received at: ' + new Date().toISOString() + ' (Local: ' + new Date().toLocaleTimeString() + ')';
-        }
-      }
-
-      function showError(msg) {
-        if (loadingEl) loadingEl.classList.add('hidden');
-        if (btnWrapperEl) btnWrapperEl.classList.add('hidden');
-        if (errorEl) {
-          errorEl.classList.remove('hidden');
-          if (errorMessageEl) errorMessageEl.textContent = msg;
-        }
-        if (diagGisStatusEl) diagGisStatusEl.textContent = 'Error: ' + msg;
-      }
-
-      function initGIS() {
-        if (!rawClientId) {
-          if (loadingEl) loadingEl.classList.add('hidden');
-          if (missingConfigEl) missingConfigEl.classList.remove('hidden');
-          if (diagGisStatusEl) diagGisStatusEl.textContent = 'Awaiting GIS_CLIENT_ID configuration';
-          return;
-        }
-
-        try {
-          if (typeof google === 'undefined' || !google.accounts || !google.accounts.id) {
-            showError('Google Identity Services library is not available in the global scope.');
-            return;
+      var btn = document.getElementById('btnLogin');
+      if (btn) {
+        btn.addEventListener('click', function(e) {
+          var href = btn.getAttribute('href');
+          if (href && href !== '#' && href.indexOf('https://') === 0) {
+            e.preventDefault();
+            window.top.location.href = href;
           }
-
-          // Initialize Google Identity Services
-          google.accounts.id.initialize({
-            client_id: rawClientId,
-            callback: handleCredentialResponse,
-            auto_select: false,
-            cancel_on_tap_outside: true
-          });
-
-          // Render official sign-in button
-          var btnTarget = document.getElementById('google-signin-btn');
-          if (!btnTarget) {
-            showError('Target element for Google sign-in button was not found.');
-            return;
-          }
-
-          google.accounts.id.renderButton(btnTarget, {
-            theme: 'outline',
-            size: 'large',
-            type: 'standard',
-            text: 'signin_with',
-            shape: 'rectangular',
-            logo_alignment: 'left'
-          });
-
-          // Show button, hide loading
-          if (loadingEl) loadingEl.classList.add('hidden');
-          if (btnWrapperEl) btnWrapperEl.classList.remove('hidden');
-          if (diagGisStatusEl) diagGisStatusEl.textContent = 'Initialized and button rendered';
-
-        } catch (err) {
-          showError('Initialization exception: ' + (err.message || String(err)));
-        }
-      }
-
-      // Check for GIS client library availability with timeout polling
-      var attempts = 0;
-      var maxAttempts = 50; // 50 * 100ms = 5 seconds
-
-      function waitForGisClient() {
-        if (typeof google !== 'undefined' && google.accounts && google.accounts.id) {
-          initGIS();
-        } else if (attempts < maxAttempts) {
-          attempts++;
-          setTimeout(waitForGisClient, 100);
-        } else {
-          // If library failed to load within timeout
-          if (!rawClientId) {
-            if (loadingEl) loadingEl.classList.add('hidden');
-            if (missingConfigEl) missingConfigEl.classList.remove('hidden');
-            if (diagGisStatusEl) diagGisStatusEl.textContent = 'GIS_CLIENT_ID not configured';
-          } else {
-            showError('Timed out waiting for Google Identity Services script (accounts.google.com/gsi/client) to load.');
-          }
-        }
-      }
-
-      // Start waiting when DOM is ready
-      if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', waitForGisClient);
-      } else {
-        waitForGisClient();
+        });
       }
     })();
   </script>

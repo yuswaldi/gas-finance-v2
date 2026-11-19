@@ -60,28 +60,44 @@ Exit criteria:
 - No credentials or generated private environment configuration are tracked.
 
 ### Phase 1 — Authentication proof of concept (GO/NO-GO)
-Tasks:
-- [x] 1. Create OAuth Web Client ID for GIS (configured via Script Properties `GIS_CLIENT_ID`). (FFM-006)
-- [x] 2. Configure GIS in HtmlService (`src/ui/webapp.js`, `src/ui/index.html`). (FFM-006)
-- [ ] 3. Create server-issued one-time nonce. (FFM-007)
-- [ ] 4. Implement Apps Script tokeninfo verification. (FFM-008)
-- [ ] 5. Validate `aud`, `iss`, `exp`, `iat`, `email_verified`, `sub`, and nonce. (FFM-008)
-- [ ] 6. Create allowlist for the two Gmail identities using verified Google `sub`. (FFM-009)
-- [ ] 7. Test both Gmail accounts in actual deployed DEV Web App. (FFM-006 / FFM-009)
-- [ ] 8. Test expired, malformed, wrong-audience, wrong-nonce, replayed-nonce, unverified-email, and disabled-user cases.
-- [ ] 9. Record tokeninfo endpoint dependency, failure behavior, and latency.
 
-*Note on FFM-006 status:* Implementation and static unit tests completed. Live browser verification against deployed DEV Web App is pending post-push deployment and OAuth origin configuration.
-*Note on CI linter fix:* Resolved ESLint `no-redeclare` errors and `no-unused-vars` warnings for Apps Script global scope by updating `.eslintrc.json` (`vars: local`, `node: false` for `src/`) and removing redundant inline `/* global ... */` directives in `src/auth/config.js` and `src/ui/webapp.js`.
-*Note on CI unit test fix:* Resolved cross-realm prototype assertion error in `tests/auth-config.test.js` where `assert.deepStrictEqual` compared Node.js VM context object prototype with host context prototype.
+*Architecture Note (FFM-006 to FFM-008):* The previous GIS credential flow is rejected because Apps Script HtmlService uses dynamic `script.googleusercontent.com` origins incompatible with OAuth Authorized JavaScript Origins. The architecture replaces GIS with Google OAuth 2.0 Authorization Code Flow + OpenID Connect scopes (`openid email profile`), server-side code exchange, and ID token verification, entirely hosted on Apps Script URLs without Cloud Run or external servers.
+
+*Callback URI Feasibility Gate:* The stable DEV Web App `/exec` URL (`https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec`) is selected as the primary OAuth redirect URI; the documented `/usercallback` endpoint (`https://script.google.com/macros/d/<SCRIPT_ID>/usercallback`) is retained as a technical fallback. Google Cloud Console accepts `/exec` as a valid Authorized redirect URI.
+
+Tasks:
+- [x] 1. OAuth Redirect Flow Proof of Concept (FFM-006):
+  - Replace GIS frontend with native "Sign in with Google" action.
+  - Generate authorization URL with `response_type=code`, `scope=openid email profile`, and `prompt=select_account`.
+  - Top-level redirect to Google OAuth authorization endpoint (`target="_top"`).
+  - Receive callback in Apps Script `doGet(e)` via `/exec` URL.
+  - Generate, validate, and immediately consume server-side state token (one-time CSRF/replay protection).
+  - Confirm both personal Gmail accounts can complete the redirect and return.
+  - Strict boundaries: No authorization code exchange yet (FFM-008), no application session creation (FFM-010), no client-supplied claims trusted.
+- [ ] 2. Server-Issued OAuth Challenge (FFM-007):
+  - Cryptographically strong random state and OIDC nonce.
+  - PKCE verifier and S256 challenge, if supported and verified.
+  - Server-side challenge storage with short TTL and one-time consumption.
+  - State-to-nonce and state-to-PKCE association.
+- [ ] 3. Authorization Code Exchange and OIDC Verification (FFM-008):
+  - Server-side code exchange using `UrlFetchApp`.
+  - Store Client Secret in Script Properties (never expose to HTML or browser JS).
+  - Verify ID token signature and claims (`aud`, `iss`, `exp`, `iat`, `nonce`, `email_verified=true`, `sub`).
+  - Reject malformed, expired, replayed, or mismatched tokens.
+- [ ] 4. Account allowlist authorization using verified Google `sub` (FFM-009).
+- [ ] 5. Test both Gmail accounts in actual deployed DEV Web App (FFM-006 / FFM-009).
+- [ ] 6. Negative security tests (expired code, wrong audience, wrong nonce, replayed state, disabled user).
+- [ ] 7. Record token endpoint dependency, failure behavior, and latency.
+
+*Note on FFM-006 status:* Implementation and automated unit tests completed. Live browser verification against deployed DEV Web App is pending Clasp sync to DEV and OAuth Client ID / Redirect URI configuration in Google Cloud Console.
 
 Exit criteria:
-- Both users can log in reliably.
-- All negative tests fail closed.
+- Both users can complete OAuth redirect and return to Apps Script `/exec`.
+- State verification fails closed on missing, invalid, or replayed state.
 - No client-supplied identity claim is trusted.
 - No raw token appears in logs or Sheets.
 
-**Hard gate:** Do not proceed to production authentication if GIS cannot operate reliably inside the deployed HtmlService sandbox or if tokeninfo validation cannot be made reliable. Do not bypass the gate by trusting email from the browser.
+**Hard gate:** Do not proceed to production authentication if the OAuth redirect flow or code exchange cannot operate reliably on Apps Script URLs. Do not bypass the gate by trusting email from the browser.
 
 ### Phase 2 — Session and authorization
 Tasks:

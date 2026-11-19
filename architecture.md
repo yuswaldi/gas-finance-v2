@@ -5,7 +5,7 @@
 - Runtime: Google Apps Script V8
 - Database: Google Sheets
 - UI: Apps Script HTMLService
-- Authentication: Google Identity Services (GIS) + Google token verification endpoint called by Apps Script
+- Authentication: Google OAuth 2.0 Authorization Code Flow (OpenID Connect) + server-side code exchange & ID token verification
 - No Cloud Run
 
 ## 1. Architecture decisions
@@ -15,8 +15,9 @@
 | Hosting | Apps Script Web App |
 | Execution identity | Execute as deploying owner |
 | Access setting | Prefer “Anyone with Google account” if offered; if only “Anyone” is available, enforce authentication on every application API |
-| Identity provider | Google Identity Services |
-| Token verification | Apps Script calls Google's `https://oauth2.googleapis.com/tokeninfo` endpoint server-side |
+| Identity provider | Google OAuth 2.0 (OpenID Connect scopes: `openid email profile`) |
+| Redirect URI | Stable Apps Script Web App `/exec` URL (e.g. `https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec`) |
+| Code exchange & verification | Server-side code exchange via `UrlFetchApp` and ID token verification |
 | Application session | Random opaque token; store only SHA-256 hash |
 | Database | Private Google Spreadsheet |
 | File storage | Private Google Drive folder |
@@ -30,11 +31,11 @@
 ```mermaid
 flowchart TD
     U[Couple members - browser] --> UI[HTMLService UI]
-    UI --> GIS[Google Identity Services]
-    GIS -->|Google ID token| GAS[Apps Script Web App]
+    UI -->|Top-level redirect: response_type=code| GOOGLE_AUTH[Google OAuth 2.0 Auth Endpoint]
+    GOOGLE_AUTH -->|Redirect callback: /exec?code=...&state=...| GAS[Apps Script Web App - doGet]
     UI -->|google.script.run| GAS
-    GAS -->|HTTPS tokeninfo request| GOOGLE[Google OAuth tokeninfo]
-    GOOGLE -->|verified claims| GAS
+    GAS -->|Server-side code exchange & tokeninfo| GOOGLE_TOKEN[Google OAuth Token Endpoint]
+    GOOGLE_TOKEN -->|ID token & verified claims| GAS
     GAS --> AUTH[Auth and Session Services]
     AUTH --> ACL[Authorization Services]
     ACL --> DOMAIN[Domain Services]
@@ -50,35 +51,62 @@ flowchart TD
 
 ## 3. Authentication design without Cloud Run
 
-### 3.1 Why not Session.getActiveUser()
+### 3.1 Rejection of GIS JavaScript Credential Flow & Rationale for OAuth 2.0 Authorization Code Flow
+The previously attempted Google Identity Services (GIS) JavaScript credential flow was evaluated and explicitly rejected:
+- Google Apps Script HtmlService serves client JavaScript within an iframe on dynamic subdomains of `script.googleusercontent.com`.
+- Google Cloud Console requires exact, static Authorized JavaScript Origins and does not support dynamic subdomains or wildcard domains on `script.googleusercontent.com`.
+- As a result, GIS cannot reliably validate JavaScript origins in deployed Apps Script Web Apps.
+- The user explicitly requires that the entire application and authentication callback remain strictly on Google Apps Script URLs without introducing external domains, reverse proxies, Cloud Run, or additional application servers.
+
+To fulfill these requirements securely, the application adopts the **Google OAuth 2.0 Authorization Code Flow** with OpenID Connect (`openid email profile`).
+
+### 3.2 Callback URI Feasibility Gate Analysis
+
+Before implementation, callback options were evaluated against security and operational criteria:
+
+1. **Candidate A: Stable DEV Web App `/exec` URL (Preferred)**
+   - Format: `https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec`
+   - Evaluation: Google Cloud Console explicitly accepts `/exec` URLs as Authorized Redirect URIs for Web Application clients. When Google redirects back to `/exec?code=...&state=...`, Apps Script dispatches the request directly to `doGet(e)`. The authorization code and state parameter are cleanly received in `e.parameter`, without requiring popup windows or secondary browser tabs.
+   - Status: **Selected as the primary redirect URI**.
+
+2. **Candidate B: Apps Script `/usercallback` Endpoint (Fallback)**
+   - Format: `https://script.google.com/macros/d/<SCRIPT_ID>/usercallback`
+   - Evaluation: Used historically by Apps Script libraries for third-party OAuth flows via popup windows. While accepted by Google Cloud Console, it normally presents a default Apps Script completion page rather than continuing the in-app Web App lifecycle.
+   - Status: **Retained as an evaluated technical fallback**.
+
+3. **Domain Constraints**:
+   - Neither `script.googleusercontent.com` nor wildcard origins are used.
+   - All redirects occur on the stable Google domain `script.google.com`.
+
+### 3.3 Why not Session.getActiveUser()
 The Web App executes as the deployer. For personal Gmail accounts, Apps Script may not expose the accessing user's email in this deployment context. `Session.getActiveUser().getEmail()` must not be treated as the primary identity mechanism.
 
-### 3.2 Browser login
-- Configure a Google OAuth 2.0 Web application client ID in Google Cloud Console.
-- Configure authorized JavaScript origins required by the actual HtmlService deployment (typically the sandbox origin displayed on the diagnostic card, such as `https://<script-id>.script.googleusercontent.com` or `https://script.google.com`).
-- Store the Web Client ID in Apps Script Script Properties as `GIS_CLIENT_ID` (or `GOOGLE_OAUTH_CLIENT_ID`). Never hardcode or commit OAuth Client IDs or secrets.
-- Load Google Identity Services client library in the HTMLService page (`https://accounts.google.com/gsi/client`).
-- Inject public configuration into HtmlService template at runtime via `src/ui/webapp.js` (`doGet`).
-- Render the official Google Sign-In button using `google.accounts.id.renderButton`.
-- Receive the credential response via the GIS JavaScript client callback (`handleCredentialResponse`).
-- Do not treat the decoded browser payload as trusted proof of identity.
-- Do not log, display in DOM, or persist the ID token in `localStorage`, `sessionStorage`, `cookies`, or Google Sheets.
-- Display a clear, safe success message indicating receipt of the credential response, accompanied by an explicit notice that frontend credential receipt does NOT constitute application authentication.
+### 3.4 Browser Login Flow (OAuth 2.0 Authorization Code Flow)
+1. User visits the Web App at `https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec`.
+2. `doGet(e)` generates a random state token using `Utilities.getUuid()`, caches it in `CacheService` with a 10-minute TTL, and constructs the Google OAuth 2.0 authorization URL:
+   ```text
+   https://accounts.google.com/o/oauth2/v2/auth?client_id=...&redirect_uri=...&response_type=code&scope=openid%20email%20profile&state=...&prompt=select_account&access_type=online
+   ```
+3. The UI renders a clean "Sign in with Google" button with `target="_top"`.
+4. When clicked, the browser navigates the top-level window directly to Google's authorization endpoint, allowing the user to select one of the two authorized household Gmail accounts.
+5. Google prompts for user consent and redirects the top-level window back to `https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec?code=...&state=...`.
+6. Apps Script receives the HTTP GET request in `doGet(e)`.
+7. `doGet(e)` validates the state parameter against `CacheService` (immediately consuming it once) and processes the authorization code.
 
-Important deployment validation: HtmlService runs in a sandboxed iframe and GIS origin behavior must be tested against the actual deployed URL. Do not assume that adding the script URL as an OAuth origin is sufficient. Complete a proof-of-concept login with both Gmail accounts before implementing the rest of the app.
-
-#### 3.2.1 FFM-006 Proof of Concept Scope & Boundaries
+#### 3.4.1 FFM-006 Proof of Concept Scope & Boundaries
 The FFM-006 implementation verifies that:
 1. The HtmlService page correctly loads in Apps Script.
-2. The GIS client library initializes and renders the Google Sign-In button.
-3. The browser callback receives a Google ID credential response upon user sign-in.
+2. The server generates an OAuth authorization URL with `response_type=code` and scopes `openid email profile`.
+3. The browser navigates top-level to Google's authorization endpoint and returns to the Apps Script `/exec` URL.
+4. The server-side state token is validated and consumed, preventing CSRF and replay.
+5. Both personal Gmail accounts can complete the redirect and return.
 
-**Security Boundaries & Exclusions:**
-- **No Server-Side Verification:** Token signature, audience (`aud`), issuer (`iss`), expiration (`exp`), and email verification claims are not yet validated.
-- **No Replay Protection:** Server-issued login nonces are not yet implemented (scheduled for FFM-007).
-- **No Allowlist Authorization:** The user allowlist restricting access to the two registered Google `sub` accounts is not yet enforced (scheduled for FFM-009).
-- **No Application Sessions:** Session token issuance, storage, and validation are not yet active (scheduled for FFM-010).
-- Receiving a GIS credential in this proof of concept does **NOT** grant access or authenticate the user into the application.
+**Security Boundaries & Exclusions for FFM-006:**
+- **No Code Exchange Yet:** The authorization code is received by `doGet(e)` but not yet exchanged for tokens via `UrlFetchApp` (scheduled for FFM-008).
+- **No Cryptographic Nonce/PKCE:** Server-issued OIDC nonces and PKCE challenges belong to FFM-007.
+- **No Allowlist Authorization:** Restricting access to the two registered Google `sub` accounts is enforced in FFM-009.
+- **No Application Sessions:** Session token issuance and storage are scheduled for FFM-010.
+- Receiving an authorization code in this proof of concept does **NOT** grant access or authenticate the user into the application.
 
 ### 3.3 Server-side verification using Google's tokeninfo endpoint
 Apps Script calls:
@@ -131,7 +159,7 @@ Validate at minimum:
 
 ### 3.7 Critical limitation and go/no-go gate
 Apps Script-only tokeninfo verification avoids Cloud Run and separate compute hosting, but introduces a dependency on Google's tokeninfo endpoint. It is not the same assurance/performance model as local JWT signature verification. Before production:
-1. Build a minimal GIS + HtmlService proof of concept.
+1. Build a minimal OAuth 2.0 Authorization Code Flow + HtmlService proof of concept.
 2. Test both personal Gmail accounts.
 3. Confirm the ID token includes the expected `aud`, `iss`, `exp`, `email_verified`, `sub`, and nonce.
 4. Test invalid token, wrong audience, expired token, replayed nonce, and Google endpoint failure.

@@ -24,7 +24,7 @@ The product is intended to become a complete household finance manager, not mere
 4. Allow two registered Gmail users to access the same household data.
 5. Keep the underlying Google Sheets and Drive files private from application users.
 6. Maintain a traceable audit history and recover safely from interrupted financial writes.
-7. Support repeatable local development and deployment using Clasp and GitHub Actions.
+7. Keep source code in GitHub; run Antigravity CLI, project edits, and Git operations inside the Docker development container. Use Node.js and Clasp exclusively inside GitHub Actions for CI, Apps Script synchronization, and deployment.
 
 ## 3. Explicit product decisions
 
@@ -41,9 +41,20 @@ The product is intended to become a complete household finance manager, not mere
 | Currency | IDR, integer Rupiah |
 | Timezone | Asia/Jakarta |
 | Deployment | Separate development and production Apps Script projects |
-| Authentication | Google Identity Services (GIS), verified server-side by Apps Script |
+| Authentication | Google OAuth 2.0 Authorization Code Flow (OpenID Connect: openid email profile), verified server-side by Apps Script |
 | Cloud Run | Not used |
 | Authorization | Household membership and OWNER/PARTNER roles |
+
+### Development and deployment tooling policy
+
+- All AI-assisted development runs inside the Docker development container at `/var/www/gas/personal_finance_v2/family-finance-antigravity`. Antigravity CLI, project file operations, and Git operations run from that container and repository.
+- The host is only used to connect to the configured container; agents must stop if they are not inside the canonical project root.
+- Node.js, npm/npx, and Clasp are not installed or run in the development container or on the host.
+- The GitHub repository is the source of truth.
+- GitHub Actions provides the Node.js runtime, installs project tooling, runs automated checks, and runs Clasp to synchronize/deploy Apps Script.
+- Apps Script V8 is the Google Apps Script server runtime; it is not Node.js and does not imply a local Node.js installation.
+- Development deployment is triggered from the designated development branch; production deployment is restricted to protected `main`.
+- Do not ask developers or agents to run `npm`, `npx`, `clasp`, or Node.js commands in the development container or on the host.
 
 ## 4. Users and roles
 
