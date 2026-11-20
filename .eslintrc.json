@@ -19,7 +19,8 @@
     "HtmlService": "readonly",
     "CacheService": "readonly",
     "ScriptApp": "readonly",
-    "AuthConfig": "writable"
+    "AuthConfig": "writable",
+    "OAuthChallenge": "writable"
   },
   "rules": {
     "no-unused-vars": [

@@ -101,12 +101,42 @@ The FFM-006 implementation verifies that:
 4. The server-side state token is validated and consumed, preventing CSRF and replay.
 5. Both personal Gmail accounts can complete the redirect and return.
 
-**Security Boundaries & Exclusions for FFM-006:**
-- **No Code Exchange Yet:** The authorization code is received by `doGet(e)` but not yet exchanged for tokens via `UrlFetchApp` (scheduled for FFM-008).
-- **No Cryptographic Nonce/PKCE:** Server-issued OIDC nonces and PKCE challenges belong to FFM-007.
-- **No Allowlist Authorization:** Restricting access to the two registered Google `sub` accounts is enforced in FFM-009.
-- **No Application Sessions:** Session token issuance and storage are scheduled for FFM-010.
-- Receiving an authorization code in this proof of concept does **NOT** grant access or authenticate the user into the application.
+#### 3.4.2 FFM-007 Server-Issued OAuth Challenge Architecture
+
+FFM-007 establishes the cryptographic challenge infrastructure for the Google OAuth 2.0 Authorization Code Flow, securing the flow against CSRF, replay, code interception, and state tampering:
+
+1. **Cryptographic Randomness & Token Generation (`OAuthChallenge.generateToken`)**:
+   - Google Apps Script V8 provides `Utilities.getUuid()`, which generates RFC 4122 v4 UUIDs backed by Google's secure random generation (122 bits of pseudorandom entropy per call).
+   - Each security token (`state`, `nonce`, and PKCE `code_verifier`) is generated independently by concatenating two distinct UUIDs with hyphens stripped, yielding 64 lowercase hexadecimal characters representing 244 bits of effective entropy.
+   - Separate, independent random values are generated for `state`, `nonce`, and `code_verifier`. No security value is reused across functions.
+
+2. **PKCE S256 Implementation (RFC 7636)**:
+   - **Google Web Client Compatibility**: Google OAuth 2.0 authorization endpoints natively support PKCE with `code_challenge_method=S256` across all client types, including Web Server Applications.
+   - **Verifier**: 64-character unreserved hex string (`[0-9a-f]`), strictly adhering to the RFC 7636 length requirement (43 to 128 characters).
+   - **Challenge Calculation**: Hashed with SHA-256 via `Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, verifier, Utilities.Charset.US_ASCII)` and Base64URL-encoded via `Utilities.base64EncodeWebSafe()`, with trailing `=` padding stripped per RFC 7636 Section 3.
+   - **Confidentiality**: The `code_verifier` is stored strictly server-side in `CacheService` and is **never** transmitted to the browser, rendered in HTML/JavaScript, or included in authorization URLs or log output. Only the derived `code_challenge` and `code_challenge_method=S256` are sent to Google in the authorization request.
+
+3. **Short-Lived Challenge Storage & Hash-Derived Keys**:
+   - Challenge records are stored in `CacheService.getScriptCache()` with a 10-minute (600s) TTL (enforcing a minimum of 300s and maximum of 600s).
+   - **Hashed Cache Keys**: The cache key is derived from a SHA-256 hash of the state parameter (`oauth_ch_<stateHash>`). Raw state tokens never appear as raw cache keys.
+   - **Stored Record**: Contains `{ stateHash, nonce, codeVerifier, codeChallenge, createdAt, expiresAt }`. The authorization code is never stored in the challenge record.
+   - **Cache Eviction Limitation & Fail-Closed Behavior**: Apps Script CacheService does not guarantee persistence for the full TTL (early eviction may occur). All cache misses, expired challenges, missing records, or lock timeouts **fail closed**, rejecting the callback with a generic, safe error (`invalid_state`) and prompting the user to start a new login attempt.
+
+4. **Atomic One-Time Challenge Consumption (`OAuthChallenge.consume`)**:
+   - To eliminate race conditions and replay attacks from duplicate concurrent callback requests, consumption is protected by `LockService.getScriptLock()`.
+   - The handler acquires the script lock (waiting up to 10 seconds), checks the record in `CacheService`, validates expiration against `expiresAt`, immediately deletes the cache entry (`cache.remove(cacheKey)`), and releases the lock in a mandatory `finally` block.
+   - Any concurrent or subsequent request with the same state encounters a cache miss and is rejected.
+
+5. **Callback Validation (`AuthConfig.validateCallback`)**:
+   - Mandatory `state` validation is enforced for **both** authorization code callbacks and Google OAuth error returns (e.g. `access_denied`).
+   - If Google returns an error, the associated state is consumed first, and a sanitized, generic error message is presented without leaking query parameters or stack traces.
+   - For valid callbacks, the challenge data (`nonce`, `codeVerifier`) is returned solely to the server-side callback handler for use in FFM-008.
+
+6. **Security Boundaries & Exclusions for FFM-007**:
+   - **No Code Exchange Yet**: Authorization code exchange via `UrlFetchApp` belongs strictly to FFM-008.
+   - **No ID Token Verification**: Cryptographic and claims verification of the Google ID token against `challenge.nonce` belongs to FFM-008.
+   - **No Application Sessions**: Session token issuance and storage in `USER_SESSIONS` belong to FFM-010.
+   - Validating the OAuth challenge confirms CSRF and replay protection but does **NOT** authenticate the identity or grant access to application data.
 
 ### 3.3 Server-side verification using Google's tokeninfo endpoint
 Apps Script calls:

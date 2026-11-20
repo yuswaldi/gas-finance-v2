@@ -281,11 +281,11 @@
         <div class="alert alert-success">
           <strong>Proof of Concept Succeeded:</strong><br>
           The browser completed the Google OAuth 2.0 redirect flow and returned to Google Apps Script.
-          The server-side state token was validated and consumed.
+          The server-side OAuth challenge (state, OIDC nonce, PKCE S256) was validated and consumed.
         </div>
 
         <div class="notice-box" style="border-left-color: #10b981;">
-          <strong>Task Boundary Notice (FFM-006):</strong><br>
+          <strong>Task Boundary Notice (FFM-007):</strong><br>
           <?= pocNotice ?><br><br>
           In accordance with task boundaries:
           <ul style="margin-left: 1.25rem; margin-top: 0.35rem;">
@@ -339,6 +339,14 @@
         <tr>
           <td>Requested Scopes</td>
           <td>openid email profile</td>
+        </tr>
+        <tr>
+          <td>PKCE Support</td>
+          <td>RFC 7636 S256 (Enforced)</td>
+        </tr>
+        <tr>
+          <td>OIDC Nonce</td>
+          <td>Server-Issued (Enforced)</td>
         </tr>
         <tr>
           <td>View State</td>

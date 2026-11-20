@@ -16,35 +16,25 @@ function doGet(e) {
 
   var params = (e && e.parameter) ? e.parameter : {};
 
-  // Case 1: OAuth Error return (user cancelled or Google OAuth error)
-  if (params.error) {
-    template.viewState = 'error';
-    template.errorCode = String(params.error);
-    template.errorMessage = params.error_description ?
-      String(params.error_description) :
-      'Google OAuth authorization was denied or returned an error (' + params.error + ').';
-  }
-  // Case 2: OAuth Success Callback return (authorization code received)
-  else if (params.code) {
-    var state = params.state || '';
-    var isStateValid = AuthConfig.validateState(state);
-
-    if (!isStateValid) {
+  // Case 1: OAuth Callback return (success code, Google OAuth error, or callback with state)
+  if (params.code || params.error || params.state) {
+    var callbackResult = AuthConfig.validateCallback(params);
+    if (!callbackResult.valid) {
       template.viewState = 'error';
-      template.errorCode = 'invalid_state';
-      template.errorMessage = 'The OAuth state parameter is missing, expired, or invalid. Request rejected to prevent CSRF and replay attacks.';
+      template.errorCode = callbackResult.errorCode || 'oauth_error';
+      template.errorMessage = callbackResult.errorMessage || 'An error occurred during authentication.';
     } else {
       template.viewState = 'callback_success';
       template.codeReceived = true;
-      template.stateValid = true;
-      template.pocNotice = 'PoC Stage FFM-006: Authorization code received and state verified. Code exchange (FFM-008) and session creation (FFM-010) are scheduled for subsequent tasks. Access is not yet granted.';
+      template.challengeVerified = true;
+      template.pocNotice = 'PoC Stage FFM-007: Server-issued OAuth challenge (state, OIDC nonce, PKCE S256) was atomically validated and consumed. Code exchange (FFM-008) and session creation (FFM-010) are scheduled for subsequent tasks. Access is not yet granted.';
     }
   }
-  // Case 3: Initial Web App Visit (Login View)
+  // Case 2: Initial Web App Visit (Login View)
   else {
     template.viewState = 'login';
-    var stateToken = AuthConfig.createState();
-    template.authUrl = AuthConfig.getAuthorizationUrl(stateToken);
+    var challenge = OAuthChallenge.create();
+    template.authUrl = AuthConfig.getAuthorizationUrl(challenge);
   }
 
   // Common template variables
@@ -63,13 +53,12 @@ function doGet(e) {
 /**
  * Public API endpoint callable via google.script.run to dynamically fetch a fresh authorization URL.
  *
- * @returns {{ authUrl: string, state: string }}
+ * @returns {{ authUrl: string }}
  */
 function apiGetAuthUrl() {
-  var state = AuthConfig.createState();
+  var challenge = OAuthChallenge.create();
   return {
-    authUrl: AuthConfig.getAuthorizationUrl(state),
-    state: state
+    authUrl: AuthConfig.getAuthorizationUrl(challenge)
   };
 }
 

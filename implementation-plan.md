@@ -74,11 +74,14 @@ Tasks:
   - Generate, validate, and immediately consume server-side state token (one-time CSRF/replay protection).
   - Confirm both personal Gmail accounts can complete the redirect and return.
   - Strict boundaries: No authorization code exchange yet (FFM-008), no application session creation (FFM-010), no client-supplied claims trusted.
-- [ ] 2. Server-Issued OAuth Challenge (FFM-007):
-  - Cryptographically strong random state and OIDC nonce.
-  - PKCE verifier and S256 challenge, if supported and verified.
-  - Server-side challenge storage with short TTL and one-time consumption.
-  - State-to-nonce and state-to-PKCE association.
+- [x] 2. Server-Issued OAuth Challenge (FFM-007):
+  - Cryptographically strong random state, OIDC nonce, and PKCE verifier (244 bits of entropy each via dual UUID concatenation).
+  - PKCE S256 challenge calculation conforming strictly to RFC 7636; verified Google Web Client PKCE support.
+  - Server-side challenge storage in `CacheService` with short TTL (300–600s) using SHA-256 hashed cache keys (`oauth_ch_<stateHash>`).
+  - Atomic one-time challenge consumption using `LockService.getScriptLock()` to prevent duplicate concurrent callbacks and replay attacks.
+  - Fail-closed security on cache eviction, missing challenge, expiration, or lock timeout.
+  - Callback validation requiring state for both code reception and Google OAuth error responses.
+  - Strict boundaries preserved: No code exchange or ID token verification yet (FFM-008), no application session issuance (FFM-010).
 - [ ] 3. Authorization Code Exchange and OIDC Verification (FFM-008):
   - Server-side code exchange using `UrlFetchApp`.
   - Store Client Secret in Script Properties (never expose to HTML or browser JS).
@@ -89,7 +92,7 @@ Tasks:
 - [ ] 6. Negative security tests (expired code, wrong audience, wrong nonce, replayed state, disabled user).
 - [ ] 7. Record token endpoint dependency, failure behavior, and latency.
 
-*Note on FFM-006 status:* Implementation and automated unit tests completed. Live browser verification against deployed DEV Web App is pending Clasp sync to DEV and OAuth Client ID / Redirect URI configuration in Google Cloud Console.
+*Note on FFM-006 & FFM-007 status:* Implementation and automated unit tests completed. Server-issued OAuth challenge generation, PKCE S256 parameterization, and atomic one-time consumption are fully implemented and verified. Live browser verification against deployed DEV Web App is pending Clasp sync to DEV and OAuth Client ID / Redirect URI configuration in Google Cloud Console.
 
 Exit criteria:
 - Both users can complete OAuth redirect and return to Apps Script `/exec`.
