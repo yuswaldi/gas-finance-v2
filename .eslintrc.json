@@ -20,7 +20,8 @@
     "CacheService": "readonly",
     "ScriptApp": "readonly",
     "AuthConfig": "writable",
-    "OAuthChallenge": "writable"
+    "OAuthChallenge": "writable",
+    "OAuthToken": "writable"
   },
   "rules": {
     "no-unused-vars": [

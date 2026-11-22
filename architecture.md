@@ -138,26 +138,56 @@ FFM-007 establishes the cryptographic challenge infrastructure for the Google OA
    - **No Application Sessions**: Session token issuance and storage in `USER_SESSIONS` belong to FFM-010.
    - Validating the OAuth challenge confirms CSRF and replay protection but does **NOT** authenticate the identity or grant access to application data.
 
-### 3.3 Server-side verification using Google's tokeninfo endpoint
-Apps Script calls:
+#### 3.4.3 FFM-008 Authorization Code Exchange & OpenID Connect Verification Architecture
 
-```text
-GET https://oauth2.googleapis.com/tokeninfo?id_token=<URL-encoded-ID-token>
-```
+FFM-008 completes the server-side identity verification step by exchanging the authorization code and validating the OpenID Connect (OIDC) ID token:
 
-Use `UrlFetchApp.fetch()` with bounded timeout where supported and inspect the HTTP status. Treat any network failure, non-2xx response, malformed JSON, or missing claim as authentication failure. Do not fall back to trusting client-supplied claims.
+1. **Server-Side Authorization Code Exchange (`OAuthToken.exchangeCode`)**:
+   - The authorization code received in the `/exec` callback is exchanged via an HTTPS POST request directly to Google's token endpoint: `https://oauth2.googleapis.com/token`.
+   - The exchange request uses `application/x-www-form-urlencoded` format with parameters:
+     - `code`: The authorization code received from Google.
+     - `client_id`: Configured Google OAuth 2.0 Web Client ID.
+     - `client_secret`: Confidential Web Client secret retrieved from Script Properties (`OAUTH_CLIENT_SECRET`).
+     - `redirect_uri`: Stable Web App `/exec` URL (must match the original authorization request exactly).
+     - `grant_type`: `authorization_code`.
+     - `code_verifier`: The high-entropy PKCE verifier retrieved from the server-side FFM-007 challenge record.
+   - Executed via `UrlFetchApp.fetch()` with `followRedirects: false` and `muteHttpExceptions: true` to inspect HTTP response codes safely.
+   - Any HTTP error or failure (e.g. `invalid_grant`, expired code, or PKCE verification failure) fails closed with a sanitized error message; codes are never automatically retried.
 
-Validate at minimum:
-- `aud` exactly equals the configured OAuth Client ID.
-- `iss` is an accepted Google issuer (`accounts.google.com` or `https://accounts.google.com`).
-- `exp` is in the future, with a small clock-skew allowance.
-- `iat` is plausible and token is sufficiently fresh.
-- `email_verified` is true.
-- `email` is one of the pre-approved accounts.
-- `sub` is present and matches the registered identity.
-- `nonce` equals a server-issued, unused nonce.
+2. **Client Credential Security**:
+   - `OAUTH_CLIENT_SECRET` is stored strictly in Apps Script Script Properties.
+   - It is never tracked in Git, never embedded in HTML/JavaScript, never exposed via `getPublicConfig()`, and never logged.
 
-`tokeninfo` is a Google verification/introspection endpoint and is commonly documented for inspection/testing. It adds a network dependency and latency, and should be treated as a pragmatic small-scale design rather than equivalent to locally verifying JWT signatures. Monitor its reliability and quotas. If the app later becomes business-critical or grows, move to a backend that verifies JWT signatures locally.
+3. **OpenID Connect ID Token Verification (`OAuthToken.verifyIdToken`)**:
+   - The response from the token endpoint is parsed to extract the `id_token` JWT.
+   - The JWT structure is validated to ensure exactly three non-empty components (`header.payload.signature`).
+   - Base64URL decoding is performed safely using standard Apps Script `Utilities.base64Decode()` without external dependencies.
+   - Header validation: Requires algorithm `RS256`, token type `JWT`, and valid key ID (`kid`).
+   - Required claim validation:
+     - **Issuer (`iss`)**: Must exactly match `https://accounts.google.com` or `accounts.google.com`.
+     - **Audience (`aud`)**: Must exactly match the configured Google OAuth Web Client ID.
+     - **Authorized Party (`azp`)**: If present, must match the configured Google OAuth Web Client ID.
+     - **Expiration (`exp`)**: Must be in the future, with a 60-second clock skew tolerance.
+     - **Issued At (`iat`)**: Must be in the past (with 60-second clock skew tolerance) and no older than 10 minutes (`MAX_TOKEN_AGE_SECONDS = 600`).
+     - **Nonce (`nonce`)**: Must be present and strictly equal to the server-issued nonce from the consumed FFM-007 challenge record, preventing cross-session and token replay attacks.
+     - **Subject (`sub`)**: Must be a non-empty string representing the immutable Google account identifier.
+     - **Email (`email`) & Verification (`email_verified`)**: Requires valid email format and `email_verified === true`.
+
+4. **Authenticity & Verification Model**:
+   - The ID token is acquired directly from Google's token endpoint over authenticated server-to-server TLS using client credentials and the one-time PKCE `code_verifier`.
+   - In accordance with OpenID Connect Core 1.0 Section 3.1.3.7 ("ID Token Validation") Rule 6, direct TLS communication with the Token Endpoint validates the issuer and token authenticity without relying on browser transport.
+   - **Environment Limitation Statement (Apps Script V8)**: Google Apps Script V8 provides `Utilities.computeRsaSha256Signature()` for private-key signing, but does not provide a native public-key RSA signature verification function (`crypto.subtle` is unavailable in Apps Script V8). Pure-JS third-party RSA libraries are not introduced to preserve the zero-runtime-dependencies architecture. Therefore, local cryptographic RSA signature verification against Google's JWKS is not natively executable within Apps Script; the application's authentication model relies on direct server-to-server TLS authentication to Google's Token Endpoint, client secret authentication, PKCE S256 verification, one-time OIDC nonce validation, and strict claims validation. Production identity verification is not claimed to include local RSA signature verification.
+
+5. **Verified Identity Object**:
+   - Upon successful verification, a sanitized identity object is constructed containing strictly validated claims:
+     `{ googleSub, email, emailVerified, name, picture, issuedAt, expiresAt, verifiedAt }`.
+   - Access tokens, refresh tokens, ID tokens, client secrets, nonces, and code verifiers are never included in the identity object.
+   - No tokens are returned to the browser or stored in `localStorage`, `sessionStorage`, cookies, or Google Sheets.
+
+6. **Security Boundaries for FFM-008**:
+   - **No Account Allowlist Verification Yet**: Checking the verified `googleSub` against the registered household members in `USERS` belongs to FFM-009.
+   - **No Application Session Yet**: Issuing and hashing application session tokens belongs to FFM-010.
+   - Completing FFM-008 verifies Google identity claims but does **NOT** grant access to household financial data.
 
 ### 3.4 Nonce and replay protection
 - `getLoginConfig()` creates a cryptographically random nonce using Apps Script Utilities.

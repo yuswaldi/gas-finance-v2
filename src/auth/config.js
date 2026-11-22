@@ -33,6 +33,25 @@ var AuthConfig = {
   },
 
   /**
+   * Retrieves the configured Google OAuth 2.0 Web Client Secret.
+   * Checks Script Properties for 'OAUTH_CLIENT_SECRET' or 'GOOGLE_OAUTH_CLIENT_SECRET'.
+   * NEVER expose this value to the browser or log traces.
+   *
+   * @returns {string} The configured client secret, or empty string if not configured.
+   */
+  getClientSecret: function() {
+    try {
+      var props = PropertiesService.getScriptProperties();
+      var secret = props.getProperty('OAUTH_CLIENT_SECRET') ||
+                   props.getProperty('GOOGLE_OAUTH_CLIENT_SECRET');
+      return secret ? String(secret).trim() : '';
+    } catch (err) {
+      Logger.log('Warning: Unable to access Script Properties for Client Secret: ' + err.message);
+      return '';
+    }
+  },
+
+  /**
    * Retrieves the OAuth 2.0 redirect URI.
    * Checks Script Properties for 'OAUTH_REDIRECT_URI' or 'WEBAPP_URL',
    * and falls back to ScriptApp.getService().getUrl().
@@ -173,7 +192,9 @@ var AuthConfig = {
 
   /**
    * Validates an incoming OAuth callback request from doGet(e).
-   * Atomically validates and consumes the associated challenge.
+   * 1. Consumes the server-side challenge atomically using state.
+   * 2. Exchanges the authorization code using PKCE code_verifier at Google's token endpoint.
+   * 3. Verifies the ID token claims (iss, aud, azp, exp, iat, nonce, sub, email, email_verified).
    *
    * @param {Object} params - Query parameters from doGet (e.parameter).
    * @returns {{
@@ -182,9 +203,10 @@ var AuthConfig = {
    *   errorCode?: string,
    *   errorMessage?: string,
    *   code?: string,
-   *   challenge?: Object,
+   *   identity?: Object,
+   *   notice?: string,
    *   challengeConsumed?: boolean
-   * }}
+   * }} Callback handling outcome.
    */
   validateCallback: function(params) {
     if (!params || typeof params !== 'object') {
@@ -206,7 +228,7 @@ var AuthConfig = {
       };
     }
 
-    // Atomically consume challenge
+    // Atomically consume challenge (validates state, expires record, prevents replay)
     var challenge = OAuthChallenge.consume(state);
     if (!challenge) {
       return {
@@ -244,11 +266,46 @@ var AuthConfig = {
       };
     }
 
+    // Step A: Perform server-side authorization code exchange
+    var exchangeResult = OAuthToken.exchangeCode({
+      code: code,
+      codeVerifier: challenge.codeVerifier,
+      clientId: this.getClientId(),
+      clientSecret: this.getClientSecret(),
+      redirectUri: this.getRedirectUri()
+    });
+
+    if (!exchangeResult.success) {
+      return {
+        valid: false,
+        isError: true,
+        errorCode: exchangeResult.error || 'exchange_failed',
+        errorMessage: 'OAuth token exchange failed (' + (exchangeResult.error || 'unknown') + '). Please try signing in again.'
+      };
+    }
+
+    // Step B: Verify the received ID token
+    var verifyResult = OAuthToken.verifyIdToken({
+      idToken: exchangeResult.idToken,
+      expectedNonce: challenge.nonce,
+      expectedClientId: this.getClientId()
+    });
+
+    if (!verifyResult.success) {
+      return {
+        valid: false,
+        isError: true,
+        errorCode: verifyResult.error || 'verification_failed',
+        errorMessage: 'OpenID Connect identity verification failed: ' + (verifyResult.errorMessage || 'invalid claims') + '.'
+      };
+    }
+
     return {
       valid: true,
       isError: false,
       code: code,
-      challenge: challenge
+      identity: verifyResult.identity,
+      notice: 'Google identity verified. Application authorization is not yet complete.'
     };
   },
 

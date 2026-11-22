@@ -27,7 +27,9 @@ function doGet(e) {
       template.viewState = 'callback_success';
       template.codeReceived = true;
       template.challengeVerified = true;
-      template.pocNotice = 'PoC Stage FFM-007: Server-issued OAuth challenge (state, OIDC nonce, PKCE S256) was atomically validated and consumed. Code exchange (FFM-008) and session creation (FFM-010) are scheduled for subsequent tasks. Access is not yet granted.';
+      template.identityVerified = true;
+      template.userEmail = callbackResult.identity ? callbackResult.identity.email : '';
+      template.pocNotice = 'PoC Stage FFM-008: Google identity verified. Application authorization is not yet complete. Account allowlist verification (FFM-009) and application session creation (FFM-010) are scheduled for subsequent tasks. Access to financial data is not yet granted.';
     }
   }
   // Case 2: Initial Web App Visit (Login View)

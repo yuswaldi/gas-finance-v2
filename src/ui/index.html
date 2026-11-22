@@ -276,22 +276,22 @@
     <? if (viewState === 'callback_success') { ?>
       <div class="card">
         <h2 class="card-title" style="color: var(--success-text);">
-          <span>✓</span> OAuth Authorization Code Received
+          <span>✓</span> Google Identity Verified
         </h2>
         <div class="alert alert-success">
-          <strong>Proof of Concept Succeeded:</strong><br>
-          The browser completed the Google OAuth 2.0 redirect flow and returned to Google Apps Script.
-          The server-side OAuth challenge (state, OIDC nonce, PKCE S256) was validated and consumed.
+          <strong>Identity Verification Succeeded:</strong><br>
+          Google authorization completed, server challenge consumed, code exchanged, and OpenID Connect identity verified.
+          <? if (typeof userEmail !== 'undefined' && userEmail) { ?><br><span>Account: <strong><?= userEmail ?></strong></span><? } ?>
         </div>
 
         <div class="notice-box" style="border-left-color: #10b981;">
-          <strong>Task Boundary Notice (FFM-007):</strong><br>
+          <strong>Task Boundary Notice (FFM-008):</strong><br>
           <?= pocNotice ?><br><br>
           In accordance with task boundaries:
           <ul style="margin-left: 1.25rem; margin-top: 0.35rem;">
-            <li>The authorization code has <strong>NOT</strong> been exchanged for tokens (FFM-008).</li>
+            <li>Account allowlist authorization is <strong>NOT</strong> yet enforced (FFM-009).</li>
             <li>No application session has been issued (FFM-010).</li>
-            <li>No data has been read or written.</li>
+            <li>No financial data has been read or written.</li>
           </ul>
         </div>
 
@@ -345,8 +345,8 @@
           <td>RFC 7636 S256 (Enforced)</td>
         </tr>
         <tr>
-          <td>OIDC Nonce</td>
-          <td>Server-Issued (Enforced)</td>
+          <td>OIDC Verification</td>
+          <td>Server-Side Claims Verified (FFM-008)</td>
         </tr>
         <tr>
           <td>View State</td>

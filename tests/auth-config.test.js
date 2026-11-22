@@ -10,7 +10,14 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const crypto = require('node:crypto');
 
-function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptApp) {
+function makeJwt(header, payload) {
+  const h = Buffer.from(JSON.stringify(header)).toString('base64url');
+  const p = Buffer.from(JSON.stringify(payload)).toString('base64url');
+  const s = Buffer.from('mock-signature-bytes').toString('base64url');
+  return `${h}.${p}.${s}`;
+}
+
+function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptApp, mockFetchHandler) {
   const cacheStore = mockCacheStore || {};
   let generatedUuidCounter = 1;
   let lockAcquired = false;
@@ -46,6 +53,17 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
         getUrl: () => 'https://script.google.com/macros/s/mock-deployment-id/exec'
       })
     },
+    UrlFetchApp: {
+      fetch: (url, options) => {
+        if (mockFetchHandler) {
+          return mockFetchHandler(url, options);
+        }
+        return {
+          getResponseCode: () => 200,
+          getContentText: () => JSON.stringify({ id_token: 'default.id.token' })
+        };
+      }
+    },
     Utilities: {
       getUuid: () => {
         const id = String(generatedUuidCounter++).padStart(4, '0');
@@ -60,6 +78,12 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
         const unsigned = bytes.map(b => b & 0xFF);
         return Buffer.from(unsigned).toString('base64').replace(/\+/g, '-').replace(/\//g, '_');
       },
+      base64Decode: (str, _charset) => {
+        return Array.from(Buffer.from(str, 'base64'));
+      },
+      newBlob: (bytes) => ({
+        getDataAsString: (_charset) => Buffer.from(bytes).toString('utf8')
+      }),
       DigestAlgorithm: {
         SHA_256: 'SHA_256'
       },
@@ -70,13 +94,17 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
     },
     Date: Date,
     JSON: JSON,
+    Math: Math,
     Number: Number,
     String: String,
     isNaN: isNaN,
+    encodeURIComponent: encodeURIComponent,
     Error: Error
   };
 
   vm.createContext(context);
+  const tokenCode = fs.readFileSync('src/auth/token.js', 'utf8');
+  vm.runInContext(tokenCode, context);
   const challengeCode = fs.readFileSync('src/auth/challenge.js', 'utf8');
   vm.runInContext(challengeCode, context);
   const configCode = fs.readFileSync('src/auth/config.js', 'utf8');
@@ -85,6 +113,7 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
   return {
     AuthConfig: context.AuthConfig,
     OAuthChallenge: context.OAuthChallenge,
+    OAuthToken: context.OAuthToken,
     cacheStore
   };
 }
@@ -107,6 +136,21 @@ test('AuthConfig.getClientId falls back to GOOGLE_OAUTH_CLIENT_ID and GIS_CLIENT
     GIS_CLIENT_ID: '555666777-gisclient.apps.googleusercontent.com'
   });
   assert.strictEqual(auth2.getClientId(), '555666777-gisclient.apps.googleusercontent.com');
+});
+
+test('AuthConfig.getClientSecret retrieves secret from Script Properties', () => {
+  const { AuthConfig } = loadAuthConfig({
+    OAUTH_CLIENT_SECRET: '  GOCSPX-my-super-secret-key  '
+  });
+  assert.strictEqual(AuthConfig.getClientSecret(), 'GOCSPX-my-super-secret-key');
+
+  const { AuthConfig: authFallback } = loadAuthConfig({
+    GOOGLE_OAUTH_CLIENT_SECRET: 'GOCSPX-fallback-secret'
+  });
+  assert.strictEqual(authFallback.getClientSecret(), 'GOCSPX-fallback-secret');
+
+  const { AuthConfig: authEmpty } = loadAuthConfig({});
+  assert.strictEqual(authEmpty.getClientSecret(), '');
 });
 
 test('AuthConfig.getClientId trims whitespace and returns empty string if unconfigured', () => {
@@ -194,9 +238,47 @@ test('AuthConfig.getAuthorizationUrl returns empty string if client_id or redire
   assert.strictEqual(noUri.getAuthorizationUrl(), '');
 });
 
-test('AuthConfig.validateCallback accepts valid callback and returns challenge data', () => {
-  const { AuthConfig, OAuthChallenge } = loadAuthConfig({});
+test('AuthConfig.validateCallback executes code exchange and ID token verification successfully', () => {
+  const clientId = 'test-client-id.apps.googleusercontent.com';
+  const redirectUri = 'https://script.google.com/macros/s/test-app/exec';
+
+  let capturedExchangeNonce = null;
+
+  const { AuthConfig, OAuthChallenge } = loadAuthConfig(
+    {
+      OAUTH_CLIENT_ID: clientId,
+      OAUTH_CLIENT_SECRET: 'test-secret',
+      OAUTH_REDIRECT_URI: redirectUri
+    },
+    null,
+    {},
+    null,
+    (_url, options) => {
+      // Return ID token matching the challenge nonce
+      const now = Math.floor(Date.now() / 1000);
+      const jwt = makeJwt(
+        { alg: 'RS256', typ: 'JWT', kid: 'test-kid' },
+        {
+          iss: 'https://accounts.google.com',
+          aud: clientId,
+          sub: 'google-sub-user-12345',
+          email: 'user@example.com',
+          email_verified: true,
+          nonce: capturedExchangeNonce,
+          iat: now - 5,
+          exp: now + 3600,
+          name: 'Verified Family User'
+        }
+      );
+      return {
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({ id_token: jwt, access_token: 'secret-acc-token' })
+      };
+    }
+  );
+
   const challenge = OAuthChallenge.create();
+  capturedExchangeNonce = challenge.nonce;
 
   const callbackResult = AuthConfig.validateCallback({
     code: 'google-auth-code-12345',
@@ -206,9 +288,42 @@ test('AuthConfig.validateCallback accepts valid callback and returns challenge d
   assert.strictEqual(callbackResult.valid, true);
   assert.strictEqual(callbackResult.isError, false);
   assert.strictEqual(callbackResult.code, 'google-auth-code-12345');
-  assert.ok(callbackResult.challenge);
-  assert.strictEqual(callbackResult.challenge.nonce, challenge.nonce);
-  assert.ok(callbackResult.challenge.codeVerifier);
+  assert.ok(callbackResult.identity);
+  assert.strictEqual(callbackResult.identity.googleSub, 'google-sub-user-12345');
+  assert.strictEqual(callbackResult.identity.email, 'user@example.com');
+  assert.strictEqual(callbackResult.identity.emailVerified, true);
+  assert.strictEqual(callbackResult.identity.name, 'Verified Family User');
+
+  // Verify no session token was created
+  assert.strictEqual(callbackResult.identity.sessionToken, undefined);
+  assert.strictEqual(callbackResult.identity.idToken, undefined);
+  assert.strictEqual(callbackResult.identity.accessToken, undefined);
+});
+
+test('AuthConfig.validateCallback handles token exchange failure safely', () => {
+  const { AuthConfig, OAuthChallenge } = loadAuthConfig(
+    {
+      OAUTH_CLIENT_ID: 'client-id',
+      OAUTH_REDIRECT_URI: 'https://example.com/exec'
+    },
+    null,
+    {},
+    null,
+    () => ({
+      getResponseCode: () => 400,
+      getContentText: () => JSON.stringify({ error: 'invalid_grant', error_description: 'Code already used' })
+    })
+  );
+
+  const challenge = OAuthChallenge.create();
+  const result = AuthConfig.validateCallback({
+    code: 'bad-code',
+    state: challenge.state
+  });
+
+  assert.strictEqual(result.valid, false);
+  assert.strictEqual(result.isError, true);
+  assert.strictEqual(result.errorCode, 'invalid_grant');
 });
 
 test('AuthConfig.validateCallback rejects missing state parameter', () => {
@@ -236,20 +351,16 @@ test('AuthConfig.validateCallback rejects invalid, unknown, or replayed state', 
   assert.strictEqual(unknownResult.valid, false);
   assert.strictEqual(unknownResult.errorCode, 'invalid_state');
 
-  // Valid first consumption
-  const first = AuthConfig.validateCallback({
-    code: 'code-123',
-    state: challenge.state
-  });
-  assert.strictEqual(first.valid, true);
+  // Consume challenge once
+  OAuthChallenge.consume(challenge.state);
 
-  // Second consumption (replayed state)
-  const second = AuthConfig.validateCallback({
+  // Attempt callback with consumed state (replay)
+  const replayResult = AuthConfig.validateCallback({
     code: 'code-123',
     state: challenge.state
   });
-  assert.strictEqual(second.valid, false);
-  assert.strictEqual(second.errorCode, 'invalid_state');
+  assert.strictEqual(replayResult.valid, false);
+  assert.strictEqual(replayResult.errorCode, 'invalid_state');
 });
 
 test('AuthConfig.validateCallback safely handles Google OAuth denial error with valid state', () => {
@@ -301,6 +412,7 @@ test('AuthConfig.validateCallback rejects malformed request parameters', () => {
 test('AuthConfig.getPublicConfig exposes only non-sensitive configuration', () => {
   const { AuthConfig } = loadAuthConfig({
     OAUTH_CLIENT_ID: 'public-client.apps.googleusercontent.com',
+    OAUTH_CLIENT_SECRET: 'super-secret-client-secret',
     OAUTH_REDIRECT_URI: 'https://script.google.com/macros/s/public-app/exec',
     SECRET_KEY: 'super-secret-value'
   });
@@ -310,5 +422,8 @@ test('AuthConfig.getPublicConfig exposes only non-sensitive configuration', () =
     clientId: 'public-client.apps.googleusercontent.com',
     redirectUri: 'https://script.google.com/macros/s/public-app/exec'
   });
+  // Client Secret must NEVER be exposed
+  assert.strictEqual(publicConfig.OAUTH_CLIENT_SECRET, undefined);
+  assert.strictEqual(publicConfig.clientSecret, undefined);
   assert.strictEqual(publicConfig.SECRET_KEY, undefined);
 });
