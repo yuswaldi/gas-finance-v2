@@ -315,12 +315,26 @@ var AuthConfig = {
       };
     }
 
+    // Step C: Evaluate account allowlist authorization (FFM-009)
+    var authResult = AuthAllowlist.authorize(verifyResult.identity);
+    if (!authResult.authorized) {
+      return {
+        valid: false,
+        isError: true,
+        errorCode: authResult.errorCode || 'unauthorized_account',
+        errorMessage: authResult.errorMessage || 'This Google account is not authorized to access the application.',
+        accountAuthorized: false,
+        identity: null
+      };
+    }
+
     return {
       valid: true,
       isError: false,
       code: code,
+      accountAuthorized: true,
       identity: verifyResult.identity,
-      notice: 'Google identity verified. Application authorization is not yet complete.'
+      notice: 'Google account authorized. Application session creation is not yet complete.'
     };
   },
 

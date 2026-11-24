@@ -28,8 +28,9 @@ function doGet(e) {
       template.codeReceived = true;
       template.challengeVerified = true;
       template.identityVerified = true;
+      template.accountAuthorized = true;
       template.userEmail = callbackResult.identity ? callbackResult.identity.email : '';
-      template.pocNotice = 'PoC Stage FFM-008: Google identity verified. Application authorization is not yet complete. Account allowlist verification (FFM-009) and application session creation (FFM-010) are scheduled for subsequent tasks. Access to financial data is not yet granted.';
+      template.pocNotice = 'PoC Stage FFM-009: Google account verified and authorized by allowlist. Application session creation is scheduled for FFM-010. Access to household finance data is not yet granted.';
     }
   }
   // Case 2: Initial Web App Visit (Login View)

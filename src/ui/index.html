@@ -276,22 +276,21 @@
     <? if (viewState === 'callback_success') { ?>
       <div class="card">
         <h2 class="card-title" style="color: var(--success-text);">
-          <span>✓</span> Google Identity Verified
+          <span>✓</span> Google Account Authorized
         </h2>
         <div class="alert alert-success">
-          <strong>Identity Verification Succeeded:</strong><br>
-          Google authorization completed, server challenge consumed, code exchanged, and OpenID Connect identity verified.
+          <strong>Identity &amp; Allowlist Authorization Succeeded:</strong><br>
+          Google authorization completed, server challenge consumed, code exchanged, identity verified, and account authorized.
           <? if (typeof userEmail !== 'undefined' && userEmail) { ?><br><span>Account: <strong><?= userEmail ?></strong></span><? } ?>
         </div>
 
         <div class="notice-box" style="border-left-color: #10b981;">
-          <strong>Task Boundary Notice (FFM-008):</strong><br>
+          <strong>Task Boundary Notice (FFM-009):</strong><br>
           <?= pocNotice ?><br><br>
           In accordance with task boundaries:
           <ul style="margin-left: 1.25rem; margin-top: 0.35rem;">
-            <li>Account allowlist authorization is <strong>NOT</strong> yet enforced (FFM-009).</li>
             <li>No application session has been issued (FFM-010).</li>
-            <li>No financial data has been read or written.</li>
+            <li>No household finance data has been read or written.</li>
           </ul>
         </div>
 
@@ -347,6 +346,10 @@
         <tr>
           <td>OIDC Verification</td>
           <td>Server-Side Claims Verified (FFM-008)</td>
+        </tr>
+        <tr>
+          <td>Allowlist Authorization</td>
+          <td>Enforced Server-Side (FFM-009)</td>
         </tr>
         <tr>
           <td>View State</td>

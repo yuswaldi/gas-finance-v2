@@ -105,6 +105,8 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
   vm.createContext(context);
   const tokenCode = fs.readFileSync('src/auth/token.js', 'utf8');
   vm.runInContext(tokenCode, context);
+  const allowlistCode = fs.readFileSync('src/auth/allowlist.js', 'utf8');
+  vm.runInContext(allowlistCode, context);
   const challengeCode = fs.readFileSync('src/auth/challenge.js', 'utf8');
   vm.runInContext(challengeCode, context);
   const configCode = fs.readFileSync('src/auth/config.js', 'utf8');
@@ -114,6 +116,7 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
     AuthConfig: context.AuthConfig,
     OAuthChallenge: context.OAuthChallenge,
     OAuthToken: context.OAuthToken,
+    AuthAllowlist: context.AuthAllowlist,
     cacheStore
   };
 }
@@ -268,7 +271,8 @@ test('AuthConfig.validateCallback executes code exchange and ID token verificati
     {
       OAUTH_CLIENT_ID: clientId,
       OAUTH_CLIENT_SECRET: 'test-secret',
-      OAUTH_REDIRECT_URI: redirectUri
+      OAUTH_REDIRECT_URI: redirectUri,
+      ALLOWED_EMAILS: 'user@example.com'
     },
     null,
     {},
@@ -307,6 +311,7 @@ test('AuthConfig.validateCallback executes code exchange and ID token verificati
 
   assert.strictEqual(callbackResult.valid, true);
   assert.strictEqual(callbackResult.isError, false);
+  assert.strictEqual(callbackResult.accountAuthorized, true);
   assert.strictEqual(callbackResult.code, 'google-auth-code-12345');
   assert.ok(callbackResult.identity);
   assert.strictEqual(callbackResult.identity.googleSub, 'google-sub-user-12345');
@@ -314,8 +319,193 @@ test('AuthConfig.validateCallback executes code exchange and ID token verificati
   assert.strictEqual(callbackResult.identity.emailVerified, true);
   assert.strictEqual(callbackResult.identity.name, 'Verified Family User');
 
-  // Verify no session token was created
+  // Verify no session token was created (FFM-010 boundary)
   assert.strictEqual(callbackResult.identity.sessionToken, undefined);
+  assert.strictEqual(callbackResult.identity.idToken, undefined);
+  assert.strictEqual(callbackResult.identity.accessToken, undefined);
+});
+
+test('AuthConfig.validateCallback rejects verified identity when not in allowlist', () => {
+  const clientId = 'test-client-id.apps.googleusercontent.com';
+  const redirectUri = 'https://script.google.com/macros/s/test-app/exec';
+  let capturedExchangeNonce = null;
+
+  const { AuthConfig, OAuthChallenge } = loadAuthConfig(
+    {
+      OAUTH_CLIENT_ID: clientId,
+      OAUTH_CLIENT_SECRET: 'test-secret',
+      OAUTH_REDIRECT_URI: redirectUri,
+      ALLOWED_EMAILS: 'authorized.partner@example.com, authorized.owner@example.com'
+    },
+    null,
+    {},
+    null,
+    (_url, options) => {
+      const now = Math.floor(Date.now() / 1000);
+      const jwt = makeJwt(
+        { alg: 'RS256', typ: 'JWT', kid: 'test-kid' },
+        {
+          iss: 'https://accounts.google.com',
+          aud: clientId,
+          sub: 'attacker-google-sub-99999',
+          email: 'unauthorized.stranger@example.com',
+          email_verified: true,
+          nonce: capturedExchangeNonce,
+          iat: now - 5,
+          exp: now + 3600,
+          name: 'Unauthorized Stranger'
+        }
+      );
+      return {
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({ id_token: jwt, access_token: 'secret-acc-token' })
+      };
+    }
+  );
+
+  const challenge = OAuthChallenge.create();
+  capturedExchangeNonce = challenge.nonce;
+
+  const callbackResult = AuthConfig.validateCallback({
+    code: 'google-auth-code-stranger',
+    state: challenge.state
+  });
+
+  assert.strictEqual(callbackResult.valid, false);
+  assert.strictEqual(callbackResult.isError, true);
+  assert.strictEqual(callbackResult.errorCode, 'unauthorized_account');
+  assert.strictEqual(callbackResult.errorMessage, 'This Google account is not authorized to access the application.');
+  assert.strictEqual(callbackResult.accountAuthorized, false);
+  assert.strictEqual(callbackResult.identity, null);
+});
+
+test('AuthConfig.validateCallback rejects verified identity when allowlist is unconfigured (fail closed)', () => {
+  const clientId = 'test-client-id.apps.googleusercontent.com';
+  const redirectUri = 'https://script.google.com/macros/s/test-app/exec';
+  let capturedExchangeNonce = null;
+
+  const { AuthConfig, OAuthChallenge } = loadAuthConfig(
+    {
+      OAUTH_CLIENT_ID: clientId,
+      OAUTH_CLIENT_SECRET: 'test-secret',
+      OAUTH_REDIRECT_URI: redirectUri
+      // ALLOWED_EMAILS is omitted / unconfigured
+    },
+    null,
+    {},
+    null,
+    (_url, _options) => {
+      const now = Math.floor(Date.now() / 1000);
+      const jwt = makeJwt(
+        { alg: 'RS256', typ: 'JWT', kid: 'test-kid' },
+        {
+          iss: 'https://accounts.google.com',
+          aud: clientId,
+          sub: 'google-sub-user-12345',
+          email: 'valid-user@example.com',
+          email_verified: true,
+          nonce: capturedExchangeNonce,
+          iat: now - 5,
+          exp: now + 3600,
+          name: 'Valid User'
+        }
+      );
+      return {
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({ id_token: jwt, access_token: 'secret-acc-token' })
+      };
+    }
+  );
+
+  const challenge = OAuthChallenge.create();
+  capturedExchangeNonce = challenge.nonce;
+
+  const callbackResult = AuthConfig.validateCallback({
+    code: 'google-auth-code-valid',
+    state: challenge.state
+  });
+
+  assert.strictEqual(callbackResult.valid, false);
+  assert.strictEqual(callbackResult.isError, true);
+  assert.strictEqual(callbackResult.errorCode, 'allowlist_unconfigured');
+  assert.strictEqual(callbackResult.errorMessage, 'This Google account is not authorized to access the application.');
+  assert.strictEqual(callbackResult.accountAuthorized, false);
+  assert.strictEqual(callbackResult.identity, null);
+});
+
+test('AuthConfig.validateCallback prevents browser identity forgery from bypassing authorization', () => {
+  const { AuthConfig } = loadAuthConfig({
+    ALLOWED_EMAILS: 'owner@example.com'
+  });
+
+  // Attacker submits forged identity object directly in request parameters
+  const forgedResult = AuthConfig.validateCallback({
+    identity: {
+      email: 'owner@example.com',
+      emailVerified: true,
+      googleSub: '123'
+    }
+    // Missing valid code and state
+  });
+
+  assert.strictEqual(forgedResult.valid, false);
+  assert.strictEqual(forgedResult.isError, true);
+  // Rejection occurs at code/state validation before any allowlist or identity trust
+  assert.strictEqual(forgedResult.errorCode, 'missing_code');
+  assert.strictEqual(forgedResult.identity, undefined);
+});
+
+test('AuthConfig.validateCallback does not invoke Google Sheets operations or issue sessions', () => {
+  const clientId = 'test-client-id.apps.googleusercontent.com';
+  const redirectUri = 'https://script.google.com/macros/s/test-app/exec';
+  let capturedExchangeNonce = null;
+
+  const { AuthConfig, OAuthChallenge } = loadAuthConfig(
+    {
+      OAUTH_CLIENT_ID: clientId,
+      OAUTH_CLIENT_SECRET: 'test-secret',
+      OAUTH_REDIRECT_URI: redirectUri,
+      ALLOWED_EMAILS: 'authorized@example.com'
+    },
+    null,
+    {},
+    null,
+    (_url, _options) => {
+      const now = Math.floor(Date.now() / 1000);
+      const jwt = makeJwt(
+        { alg: 'RS256', typ: 'JWT', kid: 'test-kid' },
+        {
+          iss: 'https://accounts.google.com',
+          aud: clientId,
+          sub: 'sub-authorized-123',
+          email: 'authorized@example.com',
+          email_verified: true,
+          nonce: capturedExchangeNonce,
+          iat: now - 5,
+          exp: now + 3600,
+          name: 'Authorized User'
+        }
+      );
+      return {
+        getResponseCode: () => 200,
+        getContentText: () => JSON.stringify({ id_token: jwt, access_token: 'secret-acc-token' })
+      };
+    }
+  );
+
+  const challenge = OAuthChallenge.create();
+  capturedExchangeNonce = challenge.nonce;
+
+  const callbackResult = AuthConfig.validateCallback({
+    code: 'google-auth-code-12345',
+    state: challenge.state
+  });
+
+  assert.strictEqual(callbackResult.valid, true);
+  assert.strictEqual(callbackResult.accountAuthorized, true);
+  // Verify strict FFM-009 boundaries: no session tokens, no id/access tokens exposed
+  assert.strictEqual(callbackResult.identity.sessionToken, undefined);
+  assert.strictEqual(callbackResult.identity.sessionId, undefined);
   assert.strictEqual(callbackResult.identity.idToken, undefined);
   assert.strictEqual(callbackResult.identity.accessToken, undefined);
 });

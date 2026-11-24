@@ -21,7 +21,8 @@
     "ScriptApp": "readonly",
     "AuthConfig": "writable",
     "OAuthChallenge": "writable",
-    "OAuthToken": "writable"
+    "OAuthToken": "writable",
+    "AuthAllowlist": "writable"
   },
   "rules": {
     "no-unused-vars": [

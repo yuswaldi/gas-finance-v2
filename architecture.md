@@ -184,10 +184,23 @@ FFM-008 completes the server-side identity verification step by exchanging the a
    - Access tokens, refresh tokens, ID tokens, client secrets, nonces, and code verifiers are never included in the identity object.
    - No tokens are returned to the browser or stored in `localStorage`, `sessionStorage`, cookies, or Google Sheets.
 
-6. **Security Boundaries for FFM-008**:
-   - **No Account Allowlist Verification Yet**: Checking the verified `googleSub` against the registered household members in `USERS` belongs to FFM-009.
-   - **No Application Session Yet**: Issuing and hashing application session tokens belongs to FFM-010.
-   - Completing FFM-008 verifies Google identity claims but does **NOT** grant access to household financial data.
+6. **Account Allowlist Authorization (FFM-009)**:
+   - Following successful OIDC verification, `AuthConfig.validateCallback()` passes the verified identity directly to `AuthAllowlist.authorize(identity)`.
+   - **Configuration Storage**: Configured via Script Properties (`ALLOWED_EMAILS` / `ALLOWED_GOOGLE_SUBS`). Stored exclusively on the server; never exposed to client-side scripts, HTML templates, or Git repositories.
+   - **Matching Policy**:
+     - Fails closed if Script Properties are unconfigured, empty, or contain only malformed entries (`allowlist_unconfigured`).
+     - Supports exact, case-insensitive email matching (`identity.email.toLowerCase() === allowedEmail.toLowerCase()`).
+     - Mandates `identity.emailVerified === true` for email-based authorization.
+     - Strict rejection of substring, prefix, suffix, and domain/wildcard matching.
+     - Email aliases (e.g., `user+alias@gmail.com`) are rejected unless explicitly listed in configuration.
+     - Supports stable Google `sub` matching via `ALLOWED_GOOGLE_SUBS` without falling back to unverified fields if sub is missing.
+   - **Information Leakage Prevention**:
+     - Denials return a generic safe message: `"This Google account is not authorized to access the application."`
+     - Allowlist entries, configuration keys, other user identities, and OAuth tokens are never leaked to the client.
+     - Unauthorized attempts do not create sessions and do not write to Google Sheets.
+   - **Task Boundary**:
+     - No application session is issued (FFM-010).
+     - No household financial data is read or written.
 
 ### 3.4 Nonce and replay protection
 - `getLoginConfig()` creates a cryptographically random nonce using Apps Script Utilities.
@@ -199,12 +212,25 @@ FFM-008 completes the server-side identity verification step by exchanging the a
 - CacheService may evict entries early; early eviction must cause login failure, not bypass. For stronger one-time semantics, use a small `LOGIN_NONCES` sheet or Script Properties with expiry and lock, and periodically clean expired records.
 - Never accept a nonce supplied by the browser without matching a server-issued record.
 
-### 3.5 Account allowlist and user registration
-- Pre-register the two users in `USERS` using verified `google_sub` values.
-- Do not auto-create users based solely on email.
-- Email can change; `google_sub` is the stable Google identity.
-- Verify the Google `sub` and email mapping against the registered user.
-- Require `status = ACTIVE` and active household membership.
+### 3.5 Account allowlist configuration and operational instructions
+- **Configuring Authorized DEV Accounts**:
+  1. Open Apps Script Editor > Project Settings > Script Properties.
+  2. Add property `ALLOWED_EMAILS` with comma-separated personal Gmail addresses of the household members (e.g. `owner@gmail.com, partner@gmail.com`).
+  3. Optionally, add `ALLOWED_GOOGLE_SUBS` with comma-separated Google `sub` identifiers.
+  4. Changes take effect immediately without modifying or redeploying code.
+- **Adding or Removing an Authorized Account**:
+  - To add an account: Append the new email/sub to `ALLOWED_EMAILS` or `ALLOWED_GOOGLE_SUBS` in Script Properties.
+  - To remove an account: Delete the email/sub from the property. Next time the user attempts OAuth login, access will be denied immediately.
+- **Missing or Malformed Configuration**:
+  - Missing property: Returns `allowlist_unconfigured` and fails closed (denies all accounts).
+  - Empty or whitespace property: Returns `allowlist_unconfigured` and fails closed.
+  - Malformed property (e.g. invalid string without `@`): Filtered by `parseList`; if no valid addresses remain, fails closed.
+- **Operational & Security Considerations**:
+  - Allowlist authorization in FFM-009 gates entry at the application perimeter.
+  - In FFM-012/013, authorized identities will be mapped to registered household records in the `USERS` sheet with role-based access control (OWNER/PARTNER).
+  - Pre-register the two users in `USERS` using verified `google_sub` values.
+  - Do not auto-create users based solely on email. Email can change; `google_sub` is the stable Google identity.
+  - Require `status = ACTIVE` and active household membership.
 
 ### 3.6 Application session
 - Generate at least 256 bits of cryptographically secure random token material.
