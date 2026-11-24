@@ -118,13 +118,19 @@ Exit criteria:
 
 ### Phase 2 — Session and authorization
 Tasks:
-- Implement random session token generation.
-- Store only token hashes.
-- Implement session expiry, idle timeout, logout, and revocation.
-- Implement OWNER/PARTNER roles.
-- Implement server-side household context resolution.
-- Add authorization tests to every public API boundary.
-- Add security event logging with redaction.
+- [x] 1. Implement random session token generation and hashed storage (FFM-010):
+  - Cryptographically secure token generation (3x UUID = 96 hex chars, 366 bits of entropy).
+  - Store only SHA-256 token hash in `PropertiesService` (persistent) and `CacheService` (read-through cache).
+  - Server-side session validation with constant-time hash comparison.
+  - Enforce 12-hour absolute lifetime and 30-minute idle timeout.
+  - Safe client-side storage policy (`sessionStorage` only, never `localStorage`, never in URLs).
+  - Gated exclusively behind successful FFM-008 OIDC verification and FFM-009 allowlist authorization.
+  - Public API endpoint `apiValidateSession(token)` for protected operations.
+- [ ] 2. Implement logout, expiry, and revocation (FFM-011).
+- [ ] 3. Implement OWNER/PARTNER roles and household authorization (FFM-012).
+- [ ] 4. Implement server-side household context resolution.
+- [ ] 5. Add authorization tests to every public API boundary.
+- [ ] 6. Add security event logging with redaction.
 
 Exit criteria:
 - All protected APIs reject missing/invalid/expired/revoked sessions.
@@ -274,7 +280,7 @@ Use one task per independently reviewable unit. Suggested IDs:
 | FFM-007 | Implement server-issued login nonce | Completed |
 | FFM-008 | Implement tokeninfo verification and claim validation | Completed |
 | FFM-009 | Seed allowlisted Google identities | Completed |
-| FFM-010 | Implement application session storage | Pending |
+| FFM-010 | Implement application session storage | Completed |
 | FFM-011 | Implement logout, expiry, and revocation | Pending |
 | FFM-012 | Implement household and role authorization | Pending |
 | FFM-013 | Implement schema registry and migrations | Pending |

@@ -29,8 +29,12 @@ function doGet(e) {
       template.challengeVerified = true;
       template.identityVerified = true;
       template.accountAuthorized = true;
+      template.sessionEstablished = !!callbackResult.session;
+      template.sessionId = callbackResult.session ? callbackResult.session.sessionId : '';
+      template.sessionToken = callbackResult.session ? callbackResult.session.token : '';
+      template.sessionExpiresAt = callbackResult.session ? callbackResult.session.expiresAt : '';
       template.userEmail = callbackResult.identity ? callbackResult.identity.email : '';
-      template.pocNotice = 'PoC Stage FFM-009: Google account verified and authorized by allowlist. Application session creation is scheduled for FFM-010. Access to household finance data is not yet granted.';
+      template.pocNotice = 'PoC Stage FFM-010: Google account verified, authorized by allowlist, and application session established. Household membership and role authorization are scheduled for FFM-012. Access to household finance data is not yet granted.';
     }
   }
   // Case 2: Initial Web App Visit (Login View)
@@ -74,4 +78,39 @@ function apiGetAuthUrl() {
  */
 function apiGetPublicConfig() {
   return AuthConfig.getPublicConfig();
+}
+
+/**
+ * Public API endpoint callable via google.script.run to validate an application session token.
+ * Validates the session token server-side and returns the authenticated user identity.
+ *
+ * @param {string} token - The raw application session token.
+ * @returns {{
+ *   authenticated: boolean,
+ *   sessionId?: string,
+ *   user?: { googleSub: string, email: string, name: string },
+ *   expiresAt?: number,
+ *   error?: string,
+ *   errorMessage?: string
+ * }}
+ */
+function apiValidateSession(token) {
+  var result = AuthSession.validateSession(token);
+  if (!result.valid) {
+    return {
+      authenticated: false,
+      error: result.error || 'invalid_session',
+      errorMessage: result.errorMessage || 'Session is invalid or expired.'
+    };
+  }
+  return {
+    authenticated: true,
+    sessionId: result.sessionId,
+    user: {
+      googleSub: result.googleSub,
+      email: result.email,
+      name: result.name
+    },
+    expiresAt: result.expiresAt
+  };
 }

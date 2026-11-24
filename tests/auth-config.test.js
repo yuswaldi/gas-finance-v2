@@ -24,9 +24,14 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
 
   const context = {
     PropertiesService: {
-      getScriptProperties: () => ({
-        getProperty: (key) => (mockProperties && mockProperties[key] !== undefined ? mockProperties[key] : null)
-      })
+      getScriptProperties: () => {
+        const props = mockProperties || {};
+        return {
+          getProperty: (key) => (props[key] !== undefined ? props[key] : null),
+          setProperty: (key, val) => { props[key] = String(val); },
+          deleteProperty: (key) => { delete props[key]; }
+        };
+      }
     },
     Logger: mockLogger || { log: () => {} },
     CacheService: {
@@ -107,6 +112,8 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
   vm.runInContext(tokenCode, context);
   const allowlistCode = fs.readFileSync('src/auth/allowlist.js', 'utf8');
   vm.runInContext(allowlistCode, context);
+  const sessionCode = fs.readFileSync('src/auth/session.js', 'utf8');
+  vm.runInContext(sessionCode, context);
   const challengeCode = fs.readFileSync('src/auth/challenge.js', 'utf8');
   vm.runInContext(challengeCode, context);
   const configCode = fs.readFileSync('src/auth/config.js', 'utf8');
@@ -117,6 +124,7 @@ function loadAuthConfig(mockProperties, mockLogger, mockCacheStore, mockScriptAp
     OAuthChallenge: context.OAuthChallenge,
     OAuthToken: context.OAuthToken,
     AuthAllowlist: context.AuthAllowlist,
+    AuthSession: context.AuthSession,
     cacheStore
   };
 }
@@ -319,7 +327,14 @@ test('AuthConfig.validateCallback executes code exchange and ID token verificati
   assert.strictEqual(callbackResult.identity.emailVerified, true);
   assert.strictEqual(callbackResult.identity.name, 'Verified Family User');
 
-  // Verify no session token was created (FFM-010 boundary)
+  // Verify application session was created (FFM-010)
+  assert.ok(callbackResult.session);
+  assert.ok(callbackResult.session.token);
+  assert.strictEqual(callbackResult.session.token.length, 96);
+  assert.ok(callbackResult.session.sessionId);
+  assert.ok(callbackResult.session.expiresAt);
+
+  // Verify identity does NOT expose sessionToken or tokens directly
   assert.strictEqual(callbackResult.identity.sessionToken, undefined);
   assert.strictEqual(callbackResult.identity.idToken, undefined);
   assert.strictEqual(callbackResult.identity.accessToken, undefined);
@@ -458,7 +473,7 @@ test('AuthConfig.validateCallback prevents browser identity forgery from bypassi
   assert.strictEqual(forgedResult.identity, undefined);
 });
 
-test('AuthConfig.validateCallback does not invoke Google Sheets operations or issue sessions', () => {
+test('AuthConfig.validateCallback does not invoke Google Sheets operations and issues application session', () => {
   const clientId = 'test-client-id.apps.googleusercontent.com';
   const redirectUri = 'https://script.google.com/macros/s/test-app/exec';
   let capturedExchangeNonce = null;
@@ -506,7 +521,12 @@ test('AuthConfig.validateCallback does not invoke Google Sheets operations or is
 
   assert.strictEqual(callbackResult.valid, true);
   assert.strictEqual(callbackResult.accountAuthorized, true);
-  // Verify strict FFM-009 boundaries: no session tokens, no id/access tokens exposed
+  assert.ok(callbackResult.session);
+  assert.ok(callbackResult.session.token);
+  assert.strictEqual(callbackResult.session.token.length, 96);
+  assert.ok(callbackResult.session.sessionId);
+  assert.ok(callbackResult.session.expiresAt);
+  // Verify strict boundaries: no session tokens in identity, no id/access tokens exposed
   assert.strictEqual(callbackResult.identity.sessionToken, undefined);
   assert.strictEqual(callbackResult.identity.sessionId, undefined);
   assert.strictEqual(callbackResult.identity.idToken, undefined);

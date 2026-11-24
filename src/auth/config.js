@@ -328,13 +328,33 @@ var AuthConfig = {
       };
     }
 
+    // Step D: Create application session (FFM-010)
+    var sessionResult = AuthSession.createSession(verifyResult.identity);
+    if (!sessionResult.success) {
+      Logger.log('Security Error: Failed to create application session: ' + sessionResult.errorMessage);
+      return {
+        valid: false,
+        isError: true,
+        errorCode: sessionResult.error || 'session_creation_failed',
+        errorMessage: 'Failed to establish application session. Please try signing in again.',
+        accountAuthorized: true,
+        identity: null,
+        session: null
+      };
+    }
+
     return {
       valid: true,
       isError: false,
       code: code,
       accountAuthorized: true,
       identity: verifyResult.identity,
-      notice: 'Google account authorized. Application session creation is not yet complete.'
+      session: {
+        token: sessionResult.token,
+        sessionId: sessionResult.sessionId,
+        expiresAt: sessionResult.expiresAt
+      },
+      notice: 'Google account authorized and application session established.'
     };
   },
 

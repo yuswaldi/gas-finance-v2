@@ -232,16 +232,44 @@ FFM-008 completes the server-side identity verification step by exchanging the a
   - Do not auto-create users based solely on email. Email can change; `google_sub` is the stable Google identity.
   - Require `status = ACTIVE` and active household membership.
 
-### 3.6 Application session
-- Generate at least 256 bits of cryptographically secure random token material.
-- Return the raw opaque token once to the browser.
-- Store only SHA-256 token hash in `USER_SESSIONS`.
-- Session policy baseline: 12-hour absolute lifetime, 30-minute idle timeout.
-- Use server-side checks on every protected API call.
-- Revoke session on logout; support OWNER revocation.
-- Do not put session tokens in URLs or logs.
-- Prefer in-memory browser storage; a page reload can require reauthentication. Do not persist bearer session tokens in localStorage.
-- Apply CSRF/origin protections appropriate to the chosen `google.script.run` transport and do not create an unauthenticated generic JSON mutation endpoint.
+### 3.6 Application session management (FFM-010)
+1. **Session Architecture & Token Generation (`AuthSession.generateSessionToken`)**:
+   - Generates at least 256 bits of cryptographically secure random token material. Concatenates three RFC 4122 v4 UUIDs without hyphens to provide 366 bits of entropy (96-character lowercase hex string). `Math.random()` is strictly prohibited.
+   - Raw session tokens are opaque bearer credentials returned to the client **only once** upon successful session creation.
+   - Raw tokens are never logged, never stored in URLs, never exposed in error messages, and never stored in plaintext on the server.
+
+2. **Server-Side Storage & Hashing Policy**:
+   - The server stores only the SHA-256 cryptographic digest of the session token (`AuthSession.hashToken()`, 64 hex characters).
+   - Storage Key: `sess_<tokenHash>`.
+   - Primary Persistent Store: `PropertiesService.getScriptProperties()`. Protects against early cache eviction and ensures durability across script execution containers for the 2-member household model.
+   - Read-Through Cache: `CacheService.getScriptCache()`. Provides sub-millisecond session validation response times, backed by `PropertiesService` persistence on cache misses.
+   - Record Structure: `{ sessionId, tokenHash, googleSub, email, name, picture, createdAt, lastSeenAt, expiresAt, status }`.
+   - Concurrency Control: `LockService.getScriptLock()` is acquired during session creation to eliminate race conditions and partial writes.
+
+3. **Session Lifetimes & Expiration Policy**:
+   - **Absolute Maximum Lifetime**: 12 hours (43,200 seconds), configurable via `SESSION_LIFETIME_SECONDS`. When reached, the session expires immediately; reauthentication is mandatory.
+   - **Idle Timeout**: 30 minutes (1,800 seconds), configurable via `SESSION_IDLE_TIMEOUT_SECONDS`. If `now - lastSeenAt >= 1800s`, the session expires.
+   - **No Implicit Lifetime Extension / No Refresh Tokens**: Absolute lifetime is strictly finite and server-enforced; session renewal does not extend the 12-hour expiration cap and does not store or use Google OAuth refresh tokens.
+
+4. **Session Validation (`AuthSession.validateSession`)**:
+   - Performs format validation (requires valid hex string of >= 64 characters).
+   - Computes SHA-256 digest of presented token and fetches record from cache / properties.
+   - Performs **constant-time string comparison** (`constantTimeEquals`) between record hash and derived hash to mitigate timing attacks.
+   - Validates that `status === 'ACTIVE'`.
+   - Validates that `now < expiresAt` and `now - lastSeenAt < idleTimeout`.
+   - Throttles persistent `lastSeenAt` timestamp updates (at most once every 60 seconds) to conserve Script Properties write quotas while keeping cache timestamps live.
+   - Returns minimal safe authenticated identity: `{ valid: true, sessionId, googleSub, email, name, createdAt, expiresAt, lastSeenAt }`.
+
+5. **Client-Side Storage & Transport Policy**:
+   - Stored in browser `sessionStorage` (tab-scoped memory) or in-memory variables.
+   - Persisting bearer tokens in `localStorage` is prohibited.
+   - Communicates with server via `google.script.run` entry point (`apiValidateSession(token)`).
+   - Browser identity claims (e.g. submitted `user_id` or `email`) are never trusted; identity is resolved strictly from the verified server-side session record.
+
+6. **Task Boundaries**:
+   - FFM-010 establishes and validates application sessions.
+   - Logout, session revocation, and multi-device revocation belong to FFM-011.
+   - Household context resolution and role-based authorization (OWNER/PARTNER) belong to FFM-012.
 
 ### 3.7 Critical limitation and go/no-go gate
 Apps Script-only tokeninfo verification avoids Cloud Run and separate compute hosting, but introduces a dependency on Google's tokeninfo endpoint. It is not the same assurance/performance model as local JWT signature verification. Before production:
