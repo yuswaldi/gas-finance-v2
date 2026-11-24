@@ -434,23 +434,26 @@ test('AuthConfig.validateCallback rejects verified identity when allowlist is un
 });
 
 test('AuthConfig.validateCallback prevents browser identity forgery from bypassing authorization', () => {
-  const { AuthConfig } = loadAuthConfig({
+  const { AuthConfig, OAuthChallenge } = loadAuthConfig({
     ALLOWED_EMAILS: 'owner@example.com'
   });
 
-  // Attacker submits forged identity object directly in request parameters
+  const challenge = OAuthChallenge.create();
+
+  // Attacker submits forged identity object with valid state but without authorization code
   const forgedResult = AuthConfig.validateCallback({
+    state: challenge.state,
     identity: {
       email: 'owner@example.com',
       emailVerified: true,
       googleSub: '123'
     }
-    // Missing valid code and state
+    // Missing authorization code
   });
 
   assert.strictEqual(forgedResult.valid, false);
   assert.strictEqual(forgedResult.isError, true);
-  // Rejection occurs at code/state validation before any allowlist or identity trust
+  // Rejection occurs at code validation before any allowlist or identity trust
   assert.strictEqual(forgedResult.errorCode, 'missing_code');
   assert.strictEqual(forgedResult.identity, undefined);
 });
