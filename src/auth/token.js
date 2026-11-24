@@ -132,6 +132,8 @@ var OAuthToken = {
     };
     if (params.clientSecret && typeof params.clientSecret === 'string' && params.clientSecret.trim()) {
       formFields.client_secret = params.clientSecret.trim();
+    } else {
+      Logger.log('Warning: client_secret is missing or empty. Google OAuth Web Client requires a valid client_secret in Script Properties.');
     }
 
     var payloadParts = [];
@@ -145,6 +147,10 @@ var OAuthToken = {
     var fetchOptions = {
       method: 'post',
       contentType: 'application/x-www-form-urlencoded',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Accept': 'application/json'
+      },
       payload: payloadBody,
       muteHttpExceptions: true,
       followRedirects: false,
@@ -166,7 +172,7 @@ var OAuthToken = {
       if (statusCode !== 200) {
         var errCode = responseData.error || ('http_' + statusCode);
         var errDesc = responseData.error_description || ('HTTP status ' + statusCode);
-        Logger.log('Warning: Google OAuth token exchange failed with status ' + statusCode + ': ' + errCode);
+        Logger.log('Warning: Google OAuth token exchange failed with HTTP status ' + statusCode + ': error="' + errCode + '", error_description="' + errDesc + '"');
         return {
           success: false,
           error: String(errCode),

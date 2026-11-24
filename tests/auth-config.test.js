@@ -149,6 +149,26 @@ test('AuthConfig.getClientSecret retrieves secret from Script Properties', () =>
   });
   assert.strictEqual(authFallback.getClientSecret(), 'GOCSPX-fallback-secret');
 
+  const { AuthConfig: authAlias1 } = loadAuthConfig({
+    CLIENT_SECRET: 'GOCSPX-alias1-secret'
+  });
+  assert.strictEqual(authAlias1.getClientSecret(), 'GOCSPX-alias1-secret');
+
+  const { AuthConfig: authAlias2 } = loadAuthConfig({
+    GOOGLE_CLIENT_SECRET: 'GOCSPX-alias2-secret'
+  });
+  assert.strictEqual(authAlias2.getClientSecret(), 'GOCSPX-alias2-secret');
+
+  const { AuthConfig: authAlias3 } = loadAuthConfig({
+    GIS_CLIENT_SECRET: 'GOCSPX-alias3-secret'
+  });
+  assert.strictEqual(authAlias3.getClientSecret(), 'GOCSPX-alias3-secret');
+
+  const { AuthConfig: authAlias4 } = loadAuthConfig({
+    OAUTH_SECRET: 'GOCSPX-alias4-secret'
+  });
+  assert.strictEqual(authAlias4.getClientSecret(), 'GOCSPX-alias4-secret');
+
   const { AuthConfig: authEmpty } = loadAuthConfig({});
   assert.strictEqual(authEmpty.getClientSecret(), '');
 });
@@ -324,6 +344,8 @@ test('AuthConfig.validateCallback handles token exchange failure safely', () => 
   assert.strictEqual(result.valid, false);
   assert.strictEqual(result.isError, true);
   assert.strictEqual(result.errorCode, 'invalid_grant');
+  assert.ok(result.errorMessage.includes('invalid_grant'));
+  assert.ok(result.errorMessage.includes('Code already used'));
 });
 
 test('AuthConfig.validateCallback rejects missing state parameter', () => {

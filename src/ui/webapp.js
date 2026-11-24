@@ -35,7 +35,8 @@ function doGet(e) {
   // Case 2: Initial Web App Visit (Login View)
   else {
     template.viewState = 'login';
-    var challenge = OAuthChallenge.create();
+    var redirectUri = AuthConfig.getRedirectUri();
+    var challenge = OAuthChallenge.create({ redirectUri: redirectUri });
     template.authUrl = AuthConfig.getAuthorizationUrl(challenge);
   }
 
@@ -58,7 +59,8 @@ function doGet(e) {
  * @returns {{ authUrl: string }}
  */
 function apiGetAuthUrl() {
-  var challenge = OAuthChallenge.create();
+  var redirectUri = AuthConfig.getRedirectUri();
+  var challenge = OAuthChallenge.create({ redirectUri: redirectUri });
   return {
     authUrl: AuthConfig.getAuthorizationUrl(challenge)
   };

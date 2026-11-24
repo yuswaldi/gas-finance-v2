@@ -166,9 +166,55 @@ test('OAuthToken.exchangeCode safely handles token endpoint HTTP error responses
   assert.strictEqual(result.error, 'invalid_grant');
   assert.ok(result.errorDescription.includes('Code has expired'));
 
-  // Ensure secret or authorization code was NOT logged
+  // Ensure HTTP status, error, and error_description were logged for diagnostics
   const allLogs = loggedMessages.join(' ');
+  assert.ok(allLogs.includes('HTTP status 400'));
+  assert.ok(allLogs.includes('invalid_grant'));
+  assert.ok(allLogs.includes('Code has expired'));
+
+  // Ensure secret or authorization code was NOT logged
   assert.ok(!allLogs.includes('expired-code'));
+});
+
+test('OAuthToken.exchangeCode logs a warning when client_secret is missing or empty', () => {
+  const { OAuthToken, loggedMessages } = loadOAuthToken();
+  OAuthToken.exchangeCode({
+    code: 'some-code',
+    codeVerifier: 'some-verifier',
+    clientId: 'client-id',
+    redirectUri: 'https://example.com/exec'
+    // clientSecret omitted
+  });
+
+  const allLogs = loggedMessages.join(' ');
+  assert.ok(allLogs.includes('client_secret is missing or empty'));
+});
+
+test('OAuthToken.exchangeCode handles invalid_request error from Google token endpoint', () => {
+  const { OAuthToken, loggedMessages } = loadOAuthToken(() => ({
+    getResponseCode: () => 400,
+    getContentText: () => JSON.stringify({
+      error: 'invalid_request',
+      error_description: 'Missing required parameter: client_secret'
+    })
+  }));
+
+  const result = OAuthToken.exchangeCode({
+    code: 'valid-code',
+    codeVerifier: 'valid-verifier',
+    clientId: 'valid-client-id',
+    redirectUri: 'https://example.com/exec'
+  });
+
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.error, 'invalid_request');
+  assert.strictEqual(result.errorDescription, 'Missing required parameter: client_secret');
+
+  const allLogs = loggedMessages.join(' ');
+  assert.ok(allLogs.includes('error="invalid_request"'));
+  assert.ok(allLogs.includes('error_description="Missing required parameter: client_secret"'));
+  assert.ok(!allLogs.includes('valid-code'));
+  assert.ok(!allLogs.includes('valid-verifier'));
 });
 
 test('OAuthToken.exchangeCode handles malformed token response (missing id_token or invalid JSON)', () => {

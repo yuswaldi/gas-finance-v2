@@ -43,7 +43,11 @@ var AuthConfig = {
     try {
       var props = PropertiesService.getScriptProperties();
       var secret = props.getProperty('OAUTH_CLIENT_SECRET') ||
-                   props.getProperty('GOOGLE_OAUTH_CLIENT_SECRET');
+                   props.getProperty('GOOGLE_OAUTH_CLIENT_SECRET') ||
+                   props.getProperty('CLIENT_SECRET') ||
+                   props.getProperty('GOOGLE_CLIENT_SECRET') ||
+                   props.getProperty('GIS_CLIENT_SECRET') ||
+                   props.getProperty('OAUTH_SECRET');
       return secret ? String(secret).trim() : '';
     } catch (err) {
       Logger.log('Warning: Unable to access Script Properties for Client Secret: ' + err.message);
@@ -99,7 +103,11 @@ var AuthConfig = {
    * }} Public challenge data needed for the authorization request.
    */
   createChallenge: function(options) {
-    return OAuthChallenge.create(options);
+    var opts = options || {};
+    if (!opts.redirectUri) {
+      opts.redirectUri = this.getRedirectUri();
+    }
+    return OAuthChallenge.create(opts);
   },
 
   /**
@@ -162,10 +170,11 @@ var AuthConfig = {
         state: challengeOrState.trim(),
         nonce: '',
         codeChallenge: '',
-        codeChallengeMethod: ''
+        codeChallengeMethod: '',
+        redirectUri: redirectUri
       };
     } else {
-      challenge = OAuthChallenge.create();
+      challenge = OAuthChallenge.create({ redirectUri: redirectUri });
     }
 
     var baseAuthUrl = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -267,20 +276,26 @@ var AuthConfig = {
     }
 
     // Step A: Perform server-side authorization code exchange
+    // Use the redirectUri from the original challenge if available, ensuring exact match
+    var redirectUri = challenge.redirectUri || this.getRedirectUri();
+
     var exchangeResult = OAuthToken.exchangeCode({
       code: code,
       codeVerifier: challenge.codeVerifier,
       clientId: this.getClientId(),
       clientSecret: this.getClientSecret(),
-      redirectUri: this.getRedirectUri()
+      redirectUri: redirectUri
     });
 
     if (!exchangeResult.success) {
+      var errCode = exchangeResult.error || 'exchange_failed';
+      var errDesc = exchangeResult.errorDescription ? (' - ' + exchangeResult.errorDescription) : '';
+      Logger.log('Notice: Token exchange unsuccessful for callback: ' + errCode + errDesc);
       return {
         valid: false,
         isError: true,
-        errorCode: exchangeResult.error || 'exchange_failed',
-        errorMessage: 'OAuth token exchange failed (' + (exchangeResult.error || 'unknown') + '). Please try signing in again.'
+        errorCode: errCode,
+        errorMessage: 'OAuth token exchange failed (' + errCode + errDesc + '). Please try signing in again.'
       };
     }
 

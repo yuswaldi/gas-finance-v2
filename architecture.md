@@ -147,8 +147,8 @@ FFM-008 completes the server-side identity verification step by exchanging the a
    - The exchange request uses `application/x-www-form-urlencoded` format with parameters:
      - `code`: The authorization code received from Google.
      - `client_id`: Configured Google OAuth 2.0 Web Client ID.
-     - `client_secret`: Confidential Web Client secret retrieved from Script Properties (`OAUTH_CLIENT_SECRET`).
-     - `redirect_uri`: Stable Web App `/exec` URL (must match the original authorization request exactly).
+     - `client_secret`: Confidential Web Client secret retrieved from Script Properties (`OAUTH_CLIENT_SECRET` or common aliases `CLIENT_SECRET`, `GOOGLE_CLIENT_SECRET`, `OAUTH_SECRET`).
+     - `redirect_uri`: Stable Web App `/exec` URL (bound directly into the server challenge record at creation time to guarantee character-for-character equality with the authorization request).
      - `grant_type`: `authorization_code`.
      - `code_verifier`: The high-entropy PKCE verifier retrieved from the server-side FFM-007 challenge record.
    - Executed via `UrlFetchApp.fetch()` with `followRedirects: false` and `muteHttpExceptions: true` to inspect HTTP response codes safely.

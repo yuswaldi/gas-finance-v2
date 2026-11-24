@@ -259,6 +259,16 @@ test('OAuthChallenge.consume fails closed when LockService cannot acquire lock',
   assert.strictEqual(result, null, 'Must fail closed when lock acquisition fails');
 });
 
+test('OAuthChallenge.create and consume preserve redirectUri for token exchange integrity', () => {
+  const { OAuthChallenge } = createMockEnvironment();
+  const testUri = 'https://script.google.com/macros/s/AKfycby123/exec';
+  const challenge = OAuthChallenge.create({ redirectUri: testUri });
+
+  const consumed = OAuthChallenge.consume(challenge.state);
+  assert.ok(consumed);
+  assert.strictEqual(consumed.redirectUri, testUri);
+});
+
 test('Concurrent duplicate callbacks cannot both consume the same challenge', () => {
   const { OAuthChallenge, cacheStore } = createMockEnvironment();
   const challenge = OAuthChallenge.create();

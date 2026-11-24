@@ -105,11 +105,14 @@ var OAuthChallenge = {
     var now = Date.now();
     var expiresAt = now + (ttl * 1000);
 
+    var redirectUri = (options && options.redirectUri) ? String(options.redirectUri).trim() : '';
+
     var challengeRecord = {
       stateHash: stateHash,
       nonce: nonce,
       codeVerifier: codeVerifier,
       codeChallenge: codeChallenge,
+      redirectUri: redirectUri,
       createdAt: now,
       expiresAt: expiresAt
     };
@@ -212,6 +215,7 @@ var OAuthChallenge = {
         nonce: record.nonce,
         codeVerifier: record.codeVerifier,
         codeChallenge: record.codeChallenge,
+        redirectUri: record.redirectUri || '',
         createdAt: record.createdAt,
         expiresAt: record.expiresAt
       };
