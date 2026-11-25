@@ -350,3 +350,214 @@ test('AuthSession.validateSession falls back to PropertiesService on cache miss'
   assert.strictEqual(validateResult.valid, true);
   assert.strictEqual(validateResult.email, 'persistent@example.com');
 });
+
+// ============================================================================
+// FFM-011: Session Revocation Tests
+// ============================================================================
+
+test('AuthSession.revokeSession marks active session as REVOKED and sets revokedAt', () => {
+  const { AuthSession, mockProperties, cacheStore } = createMockSessionEnvironment();
+  const identity = {
+    googleSub: 'sub-revoke-1',
+    email: 'revoke-test@example.com',
+    emailVerified: true,
+    name: 'Revoke Test'
+  };
+
+  const createResult = AuthSession.createSession(identity);
+  assert.strictEqual(createResult.success, true);
+
+  const tokenHash = AuthSession.hashToken(createResult.token);
+  const storageKey = 'sess_' + tokenHash;
+
+  // Confirm session is ACTIVE before revocation
+  const recordBefore = JSON.parse(mockProperties[storageKey]);
+  assert.strictEqual(recordBefore.status, 'ACTIVE');
+  assert.strictEqual(recordBefore.revokedAt, undefined);
+
+  const nowBefore = Date.now();
+  const revokeResult = AuthSession.revokeSession(createResult.token);
+  const nowAfter = Date.now();
+
+  assert.strictEqual(revokeResult.success, true);
+  assert.strictEqual(revokeResult.revoked, true);
+  assert.strictEqual(revokeResult.message, 'Session successfully revoked.');
+
+  // Verify persistent record is updated
+  const recordAfter = JSON.parse(mockProperties[storageKey]);
+  assert.strictEqual(recordAfter.status, 'REVOKED');
+  assert.ok(recordAfter.revokedAt >= nowBefore);
+  assert.ok(recordAfter.revokedAt <= nowAfter);
+});
+
+test('AuthSession.revokeSession removes session from CacheService', () => {
+  const { AuthSession, cacheStore } = createMockSessionEnvironment();
+  const createResult = AuthSession.createSession({
+    googleSub: 'sub-cache-evict',
+    email: 'cache-evict@example.com',
+    emailVerified: true
+  });
+
+  const tokenHash = AuthSession.hashToken(createResult.token);
+  const storageKey = 'sess_' + tokenHash;
+
+  // Confirm cache has the session before revocation
+  assert.ok(cacheStore[storageKey], 'Cache must hold session before revocation');
+
+  AuthSession.revokeSession(createResult.token);
+
+  // Cache entry must be removed after revocation
+  assert.strictEqual(cacheStore[storageKey], undefined, 'Cache must not contain session after revocation');
+});
+
+test('AuthSession.validateSession rejects token after revokeSession', () => {
+  const { AuthSession } = createMockSessionEnvironment();
+  const createResult = AuthSession.createSession({
+    googleSub: 'sub-post-revoke',
+    email: 'post-revoke@example.com',
+    emailVerified: true
+  });
+
+  // Validation succeeds before revocation
+  const beforeResult = AuthSession.validateSession(createResult.token);
+  assert.strictEqual(beforeResult.valid, true);
+
+  // Revoke
+  const revokeResult = AuthSession.revokeSession(createResult.token);
+  assert.strictEqual(revokeResult.success, true);
+  assert.strictEqual(revokeResult.revoked, true);
+
+  // Validation must fail after revocation
+  const afterResult = AuthSession.validateSession(createResult.token);
+  assert.strictEqual(afterResult.valid, false);
+  assert.strictEqual(afterResult.error, 'invalid_session');
+});
+
+test('AuthSession.revokeSession is idempotent for already revoked sessions', () => {
+  const { AuthSession, mockProperties } = createMockSessionEnvironment();
+  const createResult = AuthSession.createSession({
+    googleSub: 'sub-idempotent',
+    email: 'idempotent@example.com',
+    emailVerified: true
+  });
+
+  // First revocation
+  const firstResult = AuthSession.revokeSession(createResult.token);
+  assert.strictEqual(firstResult.success, true);
+  assert.strictEqual(firstResult.revoked, true);
+
+  const tokenHash = AuthSession.hashToken(createResult.token);
+  const storageKey = 'sess_' + tokenHash;
+  const recordAfterFirst = JSON.parse(mockProperties[storageKey]);
+  const firstRevokedAt = recordAfterFirst.revokedAt;
+
+  // Second revocation (idempotent)
+  const secondResult = AuthSession.revokeSession(createResult.token);
+  assert.strictEqual(secondResult.success, true);
+  assert.strictEqual(secondResult.revoked, false);
+  assert.strictEqual(secondResult.code, 'already_revoked');
+
+  // revokedAt must not change
+  const recordAfterSecond = JSON.parse(mockProperties[storageKey]);
+  assert.strictEqual(recordAfterSecond.revokedAt, firstRevokedAt);
+});
+
+test('AuthSession.revokeSession handles missing, empty, and malformed tokens safely', () => {
+  const { AuthSession } = createMockSessionEnvironment();
+
+  // Missing / empty / non-string
+  const r1 = AuthSession.revokeSession('');
+  assert.strictEqual(r1.success, true);
+  assert.strictEqual(r1.revoked, false);
+  assert.strictEqual(r1.code, 'missing_session');
+
+  const r2 = AuthSession.revokeSession(null);
+  assert.strictEqual(r2.success, true);
+  assert.strictEqual(r2.revoked, false);
+  assert.strictEqual(r2.code, 'missing_session');
+
+  const r3 = AuthSession.revokeSession(undefined);
+  assert.strictEqual(r3.success, true);
+  assert.strictEqual(r3.revoked, false);
+  assert.strictEqual(r3.code, 'missing_session');
+
+  const r4 = AuthSession.revokeSession(12345);
+  assert.strictEqual(r4.success, true);
+  assert.strictEqual(r4.revoked, false);
+  assert.strictEqual(r4.code, 'missing_session');
+
+  const r5 = AuthSession.revokeSession('   ');
+  assert.strictEqual(r5.success, true);
+  assert.strictEqual(r5.revoked, false);
+  assert.strictEqual(r5.code, 'missing_session');
+
+  // Malformed (non-hex, too short)
+  const r6 = AuthSession.revokeSession('short-token');
+  assert.strictEqual(r6.success, true);
+  assert.strictEqual(r6.revoked, false);
+  assert.strictEqual(r6.code, 'malformed_session');
+
+  const r7 = AuthSession.revokeSession('z'.repeat(96));
+  assert.strictEqual(r7.success, true);
+  assert.strictEqual(r7.revoked, false);
+  assert.strictEqual(r7.code, 'malformed_session');
+});
+
+test('AuthSession.revokeSession returns not_found for unknown valid-format token', () => {
+  const { AuthSession } = createMockSessionEnvironment();
+  const unknownToken = 'e'.repeat(96);
+
+  const result = AuthSession.revokeSession(unknownToken);
+  assert.strictEqual(result.success, true);
+  assert.strictEqual(result.revoked, false);
+  assert.strictEqual(result.code, 'not_found');
+});
+
+test('AuthSession.revokeSession fails closed when lock cannot be acquired', () => {
+  const { AuthSession } = createMockSessionEnvironment({ forceLockFail: true });
+
+  // Create a session without lock (need to bypass for this test)
+  // Instead, seed a mock session directly
+  const env = createMockSessionEnvironment();
+  const createResult = env.AuthSession.createSession({
+    googleSub: 'sub-lock-fail',
+    email: 'lock-fail@example.com',
+    emailVerified: true
+  });
+
+  // Now create a new environment with forceLockFail to test revocation lock failure
+  const tokenHash = env.AuthSession.hashToken(createResult.token);
+  const storageKey = 'sess_' + tokenHash;
+  const record = env.mockProperties[storageKey];
+
+  const lockFailEnv = createMockSessionEnvironment({
+    forceLockFail: true,
+    properties: { [storageKey]: record }
+  });
+
+  const result = lockFailEnv.AuthSession.revokeSession(createResult.token);
+  assert.strictEqual(result.success, false);
+  assert.strictEqual(result.revoked, false);
+  assert.strictEqual(result.error, 'lock_timeout');
+});
+
+test('AuthSession.revokeSession does not leak raw tokens, hashes, or storage keys in response', () => {
+  const { AuthSession } = createMockSessionEnvironment();
+  const createResult = AuthSession.createSession({
+    googleSub: 'sub-noleak',
+    email: 'noleak@example.com',
+    emailVerified: true
+  });
+  const tokenHash = AuthSession.hashToken(createResult.token);
+
+  const result = AuthSession.revokeSession(createResult.token);
+
+  // Stringify the entire response and check no sensitive data is present
+  const serialized = JSON.stringify(result);
+  assert.strictEqual(serialized.indexOf(createResult.token), -1, 'Raw token must not appear in revocation response');
+  assert.strictEqual(serialized.indexOf(tokenHash), -1, 'Token hash must not appear in revocation response');
+  assert.strictEqual(serialized.indexOf('sess_'), -1, 'Storage key prefix must not appear in revocation response');
+  assert.strictEqual(result.tokenHash, undefined);
+  assert.strictEqual(result.token, undefined);
+  assert.strictEqual(result.storageKey, undefined);
+});

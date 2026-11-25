@@ -34,7 +34,7 @@ function doGet(e) {
       template.sessionToken = callbackResult.session ? callbackResult.session.token : '';
       template.sessionExpiresAt = callbackResult.session ? callbackResult.session.expiresAt : '';
       template.userEmail = callbackResult.identity ? callbackResult.identity.email : '';
-      template.pocNotice = 'PoC Stage FFM-010: Google account verified, authorized by allowlist, and application session established. Household membership and role authorization are scheduled for FFM-012. Access to household finance data is not yet granted.';
+      template.pocNotice = 'PoC Stage FFM-011: Google account verified, authorized by allowlist, and application session established with server-side revocation and logout support. Household membership and role authorization are scheduled for FFM-012. Access to household finance data is not yet granted.';
     }
   }
   // Case 2: Initial Web App Visit (Login View)
@@ -112,5 +112,33 @@ function apiValidateSession(token) {
       name: result.name
     },
     expiresAt: result.expiresAt
+  };
+}
+
+/**
+ * Public API endpoint callable via google.script.run to log out the user and revoke the session.
+ * Revokes the server-side session record and invalidates the session token.
+ *
+ * @param {string} token - The raw application session token.
+ * @returns {{
+ *   success: boolean,
+ *   loggedOut: boolean,
+ *   error?: string,
+ *   errorMessage?: string
+ * }}
+ */
+function apiLogout(token) {
+  var result = AuthSession.revokeSession(token);
+  if (!result.success) {
+    return {
+      success: false,
+      loggedOut: false,
+      error: result.error || 'logout_failed',
+      errorMessage: result.errorMessage || 'Failed to complete server logout.'
+    };
+  }
+  return {
+    success: true,
+    loggedOut: true
   };
 }

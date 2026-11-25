@@ -126,7 +126,15 @@ Tasks:
   - Safe client-side storage policy (`sessionStorage` only, never `localStorage`, never in URLs).
   - Gated exclusively behind successful FFM-008 OIDC verification and FFM-009 allowlist authorization.
   - Public API endpoint `apiValidateSession(token)` for protected operations.
-- [ ] 2. Implement logout, expiry, and revocation (FFM-011).
+- [x] 2. Implement logout, expiry, and revocation (FFM-011):
+  - Server-side session revocation (`AuthSession.revokeSession`) with SHA-256 token hash lookup.
+  - Immediate cache eviction and persistent `REVOKED` status update with `revokedAt` timestamp under `LockService`.
+  - Idempotent repeated revocation returns `already_revoked`; safe handling of missing, malformed, and unknown tokens.
+  - Public API endpoint `apiLogout(token)` callable via `google.script.run`.
+  - Frontend logout button clears `sessionStorage` and redirects to login after server confirmation.
+  - Graceful network failure handling: client clears token and redirects even if server revocation fails.
+  - Revoked tokens permanently fail `validateSession` with `invalid_session`.
+  - `ALLOWED_EMAILS` mandatory pre-deployment checklist documented in architecture.md Section 9.6.
 - [ ] 3. Implement OWNER/PARTNER roles and household authorization (FFM-012).
 - [ ] 4. Implement server-side household context resolution.
 - [ ] 5. Add authorization tests to every public API boundary.
@@ -281,7 +289,7 @@ Use one task per independently reviewable unit. Suggested IDs:
 | FFM-008 | Implement tokeninfo verification and claim validation | Completed |
 | FFM-009 | Seed allowlisted Google identities | Completed |
 | FFM-010 | Implement application session storage | Completed |
-| FFM-011 | Implement logout, expiry, and revocation | Pending |
+| FFM-011 | Implement logout, expiry, and revocation | Completed |
 | FFM-012 | Implement household and role authorization | Pending |
 | FFM-013 | Implement schema registry and migrations | Pending |
 | FFM-014 | Implement repositories and batch I/O | Pending |
@@ -399,3 +407,6 @@ Do not commit secrets, `.clasprc.json`, OAuth client secrets, production spreads
 - [ ] Rollback documented and tested.
 - [ ] Documentation updated.
 - [ ] Git working tree clean.
+- [ ] `ALLOWED_EMAILS` configured in Script Properties for target environment.
+- [ ] `OAUTH_CLIENT_ID` and `OAUTH_CLIENT_SECRET` configured in Script Properties.
+- [ ] Pre-deployment checklist in architecture.md Section 9.6 verified.

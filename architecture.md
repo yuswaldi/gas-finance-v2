@@ -271,6 +271,51 @@ FFM-008 completes the server-side identity verification step by exchanging the a
    - Logout, session revocation, and multi-device revocation belong to FFM-011.
    - Household context resolution and role-based authorization (OWNER/PARTNER) belong to FFM-012.
 
+### 3.6.1 Logout, session revocation, and expiration handling (FFM-011)
+
+1. **Server-Side Session Revocation (`AuthSession.revokeSession`)**:
+   - Accepts the raw session token from the client via `apiLogout(token)`.
+   - Derives the SHA-256 hash using `AuthSession.hashToken()` (same lookup as `validateSession`).
+   - Immediately removes the session entry from `CacheService` to prevent stale cache hits.
+   - Acquires `LockService.getScriptLock()` (5-second timeout) before modifying persistent storage.
+   - Loads the session record from `PropertiesService` and sets `status = 'REVOKED'` with a `revokedAt` timestamp.
+   - Writes the updated record back to `PropertiesService`.
+   - `validateSession` already rejects any record with `status !== 'ACTIVE'`, so revoked sessions fail validation immediately.
+
+2. **Idempotent and Safe Revocation**:
+   - Revoking an already-revoked session returns `{ success: true, revoked: false, code: 'already_revoked' }` without modifying `revokedAt` or restoring the session.
+   - Revoking an unknown token returns `{ success: true, revoked: false, code: 'not_found' }`.
+   - Missing, empty, or malformed tokens return `{ success: true, revoked: false, code: 'missing_session' | 'malformed_session' }`.
+   - Corrupted or invalid records are removed.
+   - Lock timeout returns `{ success: false, error: 'lock_timeout' }` (fail-closed).
+
+3. **Frontend Logout Flow**:
+   - User clicks the "Sign Out / Log Out" button.
+   - Client reads the session token from `sessionStorage` (`ffm_app_session_token`).
+   - Client calls `google.script.run.apiLogout(token)` to revoke the server-side session.
+   - On success or failure, client clears `sessionStorage.removeItem('ffm_app_session_token')`.
+   - Client redirects to the Web App redirect URI (login page) via `window.top.location.href`.
+   - If `google.script.run` is unavailable (e.g., non-HtmlService context), client clears the token and redirects immediately.
+
+4. **Network Failure During Logout**:
+   - If the server revocation call fails, the client still clears the local session token and redirects to the login page.
+   - The user cannot continue using the authenticated UI state.
+   - The server-side session may remain ACTIVE until it expires naturally (12-hour absolute lifetime or 30-minute idle timeout).
+   - **Known limitation**: This is a safe degradation; the stale server-side session cannot be used by the client since the token is cleared from `sessionStorage`, which is tab-scoped.
+
+5. **Session Expiration Enforcement**:
+   - Absolute lifetime (12 hours) and idle timeout (30 minutes) remain enforced server-side by `validateSession`.
+   - Expired sessions return `{ valid: false, error: 'expired_session' }`.
+   - The client must clear the token from `sessionStorage` and return to the login page when session validation fails.
+   - No automatic session renewal or extension.
+
+6. **Security Invariants**:
+   - Raw session tokens are never stored server-side, never logged, and never returned in revocation responses.
+   - Token hashes and storage keys are never exposed to the client.
+   - Revocation is irreversible; a revoked session cannot be reactivated.
+   - Multiple logout requests on the same token are safe and idempotent.
+   - No new session is automatically created after logout.
+
 ### 3.7 Critical limitation and go/no-go gate
 Apps Script-only tokeninfo verification avoids Cloud Run and separate compute hosting, but introduces a dependency on Google's tokeninfo endpoint. It is not the same assurance/performance model as local JWT signature verification. Before production:
 1. Build a minimal OAuth 2.0 Authorization Code Flow + HtmlService proof of concept.
@@ -517,6 +562,30 @@ Given the GitHub Free Plan constraint (absence of automated multi-party approval
 - **Code Review**: Conduct thorough code and security reviews on development branches (`dev`/`develop`) before merging to `main`.
 - **Credential Isolation**: Store production credentials exclusively in GitHub Actions Secrets; never expose production secrets to pull request workflows.
 - **Procedural Limitation**: Manual `workflow_dispatch` is an operational procedural check and does not provide the same security guarantees as an automated required-reviewer approval gate. Maintainers must exercise deliberate review prior to dispatching production deployments.
+
+### 9.6 Mandatory Pre-Deployment Checklist
+
+Before deploying to any environment (DEV or PROD), verify the following Script Properties are configured in the target Apps Script project:
+
+| Script Property | Required | Purpose | Expected Format |
+|---|---|---|---|
+| `OAUTH_CLIENT_ID` | Yes | Google OAuth 2.0 Web Client ID | `<id>.apps.googleusercontent.com` |
+| `OAUTH_CLIENT_SECRET` | Yes | Google OAuth 2.0 Client Secret | Obtained from Google Cloud Console |
+| `OAUTH_REDIRECT_URI` | Recommended | Explicit redirect URI override | `https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec` |
+| `ALLOWED_EMAILS` | **Yes** | Comma-separated list of authorized household member Gmail addresses | `owner@gmail.com, partner@gmail.com` |
+| `ALLOWED_GOOGLE_SUBS` | Optional | Comma-separated Google `sub` identifiers for immutable identity matching | `1234567890, 0987654321` |
+| `SESSION_LIFETIME_SECONDS` | Optional | Absolute session lifetime (default: 43200 = 12 hours) | Integer seconds |
+| `SESSION_IDLE_TIMEOUT_SECONDS` | Optional | Session idle timeout (default: 1800 = 30 minutes) | Integer seconds |
+
+**Critical**: If `ALLOWED_EMAILS` is missing or empty, the application fails closed with `allowlist_unconfigured` and **all login attempts are denied**. This is by design to prevent unauthorized access.
+
+Verification steps:
+1. Open the target Apps Script project in the Apps Script Editor.
+2. Navigate to Project Settings > Script Properties.
+3. Confirm each required property is present, non-empty, and correctly formatted.
+4. For `ALLOWED_EMAILS`, verify only the two authorized household Gmail addresses are listed.
+5. After deployment, test login with both authorized accounts.
+6. Test login with an unauthorized account to confirm denial.
 
 ## 10. Monitoring, backup, and operations
 - Log operational event IDs, function names, duration, outcome, and correlation IDs.

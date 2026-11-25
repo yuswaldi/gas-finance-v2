@@ -435,5 +435,164 @@ var AuthSession = {
       expiresAt: record.expiresAt,
       lastSeenAt: record.lastSeenAt
     };
+  },
+
+  /**
+   * Revokes an existing application session (FFM-011).
+   * Identifies the session by presented token, derives SHA-256 hash, marks status as REVOKED,
+   * purges it from CacheService, and prevents any future validation of this token.
+   * Handles missing, malformed, unknown, and already revoked sessions safely.
+   *
+   * @param {string} token - Raw session token.
+   * @returns {{
+   *   success: boolean,
+   *   revoked: boolean,
+   *   code?: string,
+   *   message?: string,
+   *   error?: string,
+   *   errorMessage?: string
+   * }}
+   */
+  revokeSession: function(token) {
+    if (!token || typeof token !== 'string' || token.trim().length === 0) {
+      return {
+        success: true,
+        revoked: false,
+        code: 'missing_session',
+        message: 'No active session token provided.'
+      };
+    }
+
+    var trimmed = token.trim();
+    if (!/^[0-9a-f]{64,}$/i.test(trimmed)) {
+      return {
+        success: true,
+        revoked: false,
+        code: 'malformed_session',
+        message: 'Invalid session token format.'
+      };
+    }
+
+    var tokenHash = this.hashToken(trimmed);
+    var storageKey = this.STORAGE_KEY_PREFIX + tokenHash;
+
+    // Purge from cache immediately
+    try {
+      var cache = CacheService.getScriptCache();
+      if (cache) {
+        cache.remove(storageKey);
+      }
+    } catch (_cacheErr) {
+      // Non-fatal cache eviction error
+    }
+
+    var props;
+    try {
+      props = PropertiesService.getScriptProperties();
+    } catch (err) {
+      Logger.log('Error accessing Script Properties during revocation: ' + err.message);
+      return {
+        success: false,
+        revoked: false,
+        error: 'storage_error',
+        errorMessage: 'Failed to access session storage for revocation.'
+      };
+    }
+
+    if (!props) {
+      return {
+        success: false,
+        revoked: false,
+        error: 'storage_error',
+        errorMessage: 'Session storage is unavailable.'
+      };
+    }
+
+    var lock = LockService.getScriptLock();
+    var hasLock = false;
+    try {
+      hasLock = lock.tryLock(5000);
+    } catch (lockErr) {
+      Logger.log('LockService warning during revocation: ' + lockErr.message);
+    }
+
+    if (!hasLock) {
+      return {
+        success: false,
+        revoked: false,
+        error: 'lock_timeout',
+        errorMessage: 'Could not acquire lock to revoke session.'
+      };
+    }
+
+    try {
+      var rawRecord = props.getProperty(storageKey);
+      if (!rawRecord) {
+        return {
+          success: true,
+          revoked: false,
+          code: 'not_found',
+          message: 'Session not found or already removed.'
+        };
+      }
+
+      var record;
+      try {
+        record = JSON.parse(rawRecord);
+      } catch (_e) {
+        props.deleteProperty(storageKey);
+        return {
+          success: true,
+          revoked: true,
+          code: 'corrupted_removed',
+          message: 'Corrupted session record removed.'
+        };
+      }
+
+      if (!record || typeof record !== 'object') {
+        props.deleteProperty(storageKey);
+        return {
+          success: true,
+          revoked: true,
+          code: 'invalid_removed',
+          message: 'Invalid session record removed.'
+        };
+      }
+
+      // If already revoked, maintain revocation state idempotently
+      if (record.status === 'REVOKED') {
+        return {
+          success: true,
+          revoked: false,
+          code: 'already_revoked',
+          message: 'Session is already revoked.'
+        };
+      }
+
+      var now = Date.now();
+      record.status = 'REVOKED';
+      record.revokedAt = now;
+      props.setProperty(storageKey, JSON.stringify(record));
+
+      return {
+        success: true,
+        revoked: true,
+        message: 'Session successfully revoked.'
+      };
+    } catch (err) {
+      Logger.log('Error revoking session: ' + err.message);
+      return {
+        success: false,
+        revoked: false,
+        error: 'revocation_failed',
+        errorMessage: 'Failed to revoke application session.'
+      };
+    } finally {
+      try {
+        lock.releaseLock();
+      } catch (_e) {
+        // Lock already released
+      }
+    }
   }
 };

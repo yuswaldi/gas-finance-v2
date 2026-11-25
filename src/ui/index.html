@@ -286,17 +286,18 @@
         </div>
 
         <div class="notice-box" style="border-left-color: #10b981;">
-          <strong>Task Boundary Notice (FFM-010):</strong><br>
+          <strong>Task Boundary Notice (FFM-011):</strong><br>
           <?= pocNotice ?><br><br>
           In accordance with task boundaries:
           <ul style="margin-left: 1.25rem; margin-top: 0.35rem;">
-            <li>Application session established and stored server-side (FFM-010).</li>
+            <li>Application session established with server-side revocation and logout support (FFM-011).</li>
             <li>Household membership and role authorization are scheduled for FFM-012.</li>
             <li>No household finance data has been read or written.</li>
           </ul>
         </div>
 
-        <div style="margin-top: 1.25rem;">
+        <div style="margin-top: 1.25rem; display: flex; gap: 0.75rem; flex-wrap: wrap;">
+          <button id="btnLogout" type="button" class="btn btn-secondary">Sign Out / Log Out</button>
           <a href="<?= redirectUri ?>" target="_top" class="btn btn-secondary">Test Sign-In Again</a>
         </div>
       </div>
@@ -355,7 +356,7 @@
         </tr>
         <tr>
           <td>Application Session</td>
-          <td><?= (typeof sessionEstablished !== 'undefined' && sessionEstablished) ? 'Active &amp; Stored (FFM-010)' : 'Not Established' ?></td>
+          <td><?= (typeof sessionEstablished !== 'undefined' && sessionEstablished) ? 'Active &amp; Revocable (FFM-011)' : 'Not Established' ?></td>
         </tr>
         <tr>
           <td>View State</td>
@@ -379,6 +380,46 @@
           if (href && href !== '#' && href.indexOf('https://') === 0) {
             e.preventDefault();
             window.top.location.href = href;
+          }
+        });
+      }
+
+      var btnLogout = document.getElementById('btnLogout');
+      if (btnLogout) {
+        btnLogout.addEventListener('click', function(e) {
+          e.preventDefault();
+          btnLogout.disabled = true;
+          btnLogout.textContent = 'Signing out...';
+
+          var token = null;
+          try {
+            token = sessionStorage.getItem('ffm_app_session_token');
+          } catch (_e) {}
+
+          function finishClientLogout() {
+            try {
+              sessionStorage.removeItem('ffm_app_session_token');
+            } catch (_e) {}
+            var dest = <?= JSON.stringify(redirectUri || '') ?>;
+            if (dest && dest.indexOf('https://') === 0) {
+              window.top.location.href = dest;
+            } else {
+              window.location.reload();
+            }
+          }
+
+          if (token && typeof google !== 'undefined' && google.script && google.script.run) {
+            google.script.run
+              .withSuccessHandler(function(_res) {
+                finishClientLogout();
+              })
+              .withFailureHandler(function(_err) {
+                // Safe client fallback: clear local token even if network fails
+                finishClientLogout();
+              })
+              .apiLogout(token);
+          } else {
+            finishClientLogout();
           }
         });
       }
