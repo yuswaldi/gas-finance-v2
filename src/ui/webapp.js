@@ -251,3 +251,57 @@ function apiAuthorizeOperation(token, permission, requestScope) {
     permission: permission
   };
 }
+
+/**
+ * Controlled administrative entry point to initialize or run pending database schema migrations (FFM-013).
+ * Strictly enforces FFM-010/011 session validation and FFM-012 OWNER role authorization
+ * ('system.backup.manage') before invoking SchemaMigrations.runMigrations().
+ *
+ * @param {string} token - Raw application session token of an authenticated OWNER.
+ * @returns {{
+ *   success: boolean,
+ *   authorized: boolean,
+ *   authenticated: boolean,
+ *   status?: string,
+ *   previousVersion?: number,
+ *   currentVersion?: number,
+ *   appliedMigrations?: string[],
+ *   errorCode?: string,
+ *   errorMessage?: string
+ * }}
+ */
+function apiRunDatabaseMigrations(token) {
+  var authResult = AuthAuthorization.authorizeRequest(token, 'system.backup.manage');
+  if (!authResult.authorized) {
+    return {
+      success: false,
+      authorized: false,
+      authenticated: !!authResult.authenticated,
+      errorCode: authResult.errorCode || 'permission_denied',
+      errorMessage: authResult.errorMessage || AuthAuthorization.SAFE_ERROR_MESSAGE
+    };
+  }
+
+  var migrationResult = SchemaMigrations.runMigrations();
+  if (!migrationResult.success) {
+    return {
+      success: false,
+      authorized: true,
+      authenticated: true,
+      previousVersion: migrationResult.previousVersion,
+      currentVersion: migrationResult.currentVersion,
+      errorCode: migrationResult.errorCode || 'migration_execution_failed',
+      errorMessage: migrationResult.errorMessage || SchemaMigrations.SAFE_ERROR_MESSAGE
+    };
+  }
+
+  return {
+    success: true,
+    authorized: true,
+    authenticated: true,
+    status: migrationResult.status,
+    previousVersion: migrationResult.previousVersion,
+    currentVersion: migrationResult.currentVersion,
+    appliedMigrations: migrationResult.appliedMigrations || []
+  };
+}

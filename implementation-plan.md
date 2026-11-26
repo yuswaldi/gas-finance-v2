@@ -155,13 +155,21 @@ Exit criteria:
 
 ### Phase 3 — Database foundation
 Tasks:
-- Implement schema registry and schema version.
-- Implement sheet creation/headers.
-- Implement batched repository utilities.
-- Implement UUID and timestamp helpers.
-- Implement validation of same-household foreign references.
-- Seed the initial household and two members.
-- Add backup and restore procedure.
+- [x] 1. Implement schema registry and schema version (FFM-013):
+  - Authoritative, deeply frozen `SchemaRegistry` (`src/database/schema-registry.js`) defining all 29 canonical worksheets and exact header ordering from `database-schema.md` (`CURRENT_VERSION = 1`).
+  - Header validation (`validateWorksheetHeaders`) detecting missing, unknown, renamed, and reordered columns.
+  - Authoritative `SCHEMA_VERSION` tracking in Script Properties (`SchemaMigrations` in `src/database/migrations.js`) rejecting non-integer, negative, downgraded, or unknown future versions.
+- [x] 2. Implement sheet creation/headers and versioned migration runner (FFM-013):
+  - Versioned migration registry (`001_initial_canonical_schema`) with ascending version validation and pending migration selection.
+  - Protected by `LockService.getScriptLock()` with mandatory release in `finally`.
+  - Safe worksheet creation (`ensureWorksheet`) using batch `setValues()` and `setFrozenRows(1)`.
+  - Preserves existing valid and populated worksheets without deleting sheets, clearing data, or silently removing unknown columns; fails safely on header mismatch or ambiguous unversioned pre-populated database (`ambiguous_unversioned_database`).
+  - Controlled `OWNER`-only administrative endpoint `apiRunDatabaseMigrations(token)` gated by FFM-012 `'system.backup.manage'`.
+- [ ] 3. Implement batched repository utilities (FFM-014).
+- [ ] 4. Implement UUID and timestamp helpers.
+- [ ] 5. Implement validation of same-household foreign references.
+- [ ] 6. Seed the initial household and two members.
+- [ ] 7. Add backup and restore procedure.
 
 Exit criteria:
 - DEV schema can be recreated repeatably.
@@ -298,7 +306,7 @@ Use one task per independently reviewable unit. Suggested IDs:
 | FFM-010 | Implement application session storage | Completed |
 | FFM-011 | Implement logout, expiry, and revocation | Completed |
 | FFM-012 | Implement household and role authorization | Completed |
-| FFM-013 | Implement schema registry and migrations | Pending |
+| FFM-013 | Implement schema registry and migrations | Completed |
 | FFM-014 | Implement repositories and batch I/O | Pending |
 | FFM-015 | Implement account and category modules | Pending |
 | FFM-016 | Implement transaction draft and validation | Pending |

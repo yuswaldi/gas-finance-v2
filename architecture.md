@@ -459,6 +459,52 @@ Recommended layers:
 - Repositories.
 - Database/schema/migration helpers.
 
+### 5.2.1 Schema registry and migration framework (FFM-013)
+
+FFM-013 establishes the authoritative schema registry (`SchemaRegistry` in `src/database/schema-registry.js`) and versioned migration framework (`SchemaMigrations` in `src/database/migrations.js`):
+
+1. **Schema Registry (`src/database/schema-registry.js`)**:
+   - **Single Authoritative Definition**: Encodes all 29 canonical worksheets defined in `database-schema.md` in exact deterministic order (`01 USERS` through `29 LOGIN_LOGS`), with exact stable column names, header order, primary keys, `householdScoped` flags, and documented enum constraints.
+   - **Immutability**: All worksheet definitions, header arrays, and lookup structures are deeply frozen (`Object.freeze`) and accessor methods (`getWorksheetNames`, `getHeaders`, `getAllWorksheetDefinitions`) return defensive array copies so consumers cannot mutate the registry.
+   - **Current Schema Version**: `SchemaRegistry.CURRENT_VERSION = 1`.
+   - **Header Validation (`SchemaRegistry.validateWorksheetHeaders`)**: Compares actual row-1 headers against the canonical definition, detecting missing columns, unknown/extra columns, renamed columns, and column order mismatches.
+
+2. **Schema Version Tracking (`SchemaMigrations.getSchemaVersion` / `setSchemaVersion`)**:
+   - **Single Authoritative Store**: Persisted in environment-specific Apps Script Script Properties under `SCHEMA_VERSION`.
+   - **Strict Validation**:
+     - Uninitialized (missing or empty `SCHEMA_VERSION`) resolves to `version: 0, initialized: false`.
+     - Non-integer, negative, or corrupted values fail closed with `invalid_schema_version`.
+     - Any persisted version greater than `SchemaRegistry.CURRENT_VERSION` fails closed with `unsupported_future_schema_version`.
+     - Downgrading `SCHEMA_VERSION` is rejected with `schema_version_downgrade_rejected`.
+     - `SCHEMA_VERSION` is persisted **only** after all pending migrations and post-migration full-schema verification succeed.
+
+3. **Migration Naming, Ordering, and Execution (`SchemaMigrations.runMigrations`)**:
+   - **Naming Convention**: `<3-digit-version>_<descriptive_snake_case>` (e.g., `001_initial_canonical_schema`) with strictly ascending positive integer `version`.
+   - **Concurrency Control**: Acquires `LockService.getScriptLock()` (default 10s timeout) before reading `SCHEMA_VERSION` or modifying the spreadsheet, and always releases the lock in a `finally` block. Fails safely with `migration_lock_timeout` if the lock cannot be acquired.
+   - **Ambiguous Baseline Protection**: If `SCHEMA_VERSION` is uninitialized (`0`) and the target spreadsheet already contains data rows (`lastRow > 1`), `runMigrations()` fails safely with `ambiguous_unversioned_database` without modifying data, requiring either a clean disposable spreadsheet or an explicit baseline adoption decision (`adoptExistingBaseline: true`).
+   - **Safe Worksheet & Header Operations (`SchemaMigrations.ensureWorksheet`)**:
+     - Missing worksheets are created (`insertSheet`) with row-1 canonical headers written in a single batch `setValues()` call and row 1 frozen (`setFrozenRows(1)`).
+     - Existing genuinely empty worksheets (`lastRow === 0 && lastColumn === 0`) are initialized with canonical headers.
+     - Existing non-empty worksheets are validated against the canonical header definition without deleting the sheet, clearing data, overwriting headers, reordering columns, or removing unknown columns. Any mismatch fails safely with `header_mismatch` and a diagnostic identifying the worksheet and column discrepancy.
+
+4. **Non-Transactional Recovery & Idempotency**:
+   - Google Sheets does not provide multi-sheet ACID transactions.
+   - If an initial migration fails partway through (e.g., after creating 11 of 29 header-only worksheets), `SCHEMA_VERSION` remains unset. Retrying `runMigrations()` inspects existing header-only worksheets (`lastRow === 1`), verifies their canonical headers, preserves them intact, creates the remaining missing worksheets, validates all 29 worksheets, and only then sets `SCHEMA_VERSION = 1`.
+   - Re-running `runMigrations()` when `SCHEMA_VERSION = 1` performs read-only verification of all 29 worksheets and returns `status: 'up_to_date'` without duplicate sheets or duplicate header rows.
+
+5. **Controlled Initialization & Environment Isolation**:
+   - Migrations are **never** executed automatically on public API requests.
+   - To initialize a clean DEV spreadsheet:
+     1. Create a dedicated private DEV Google Spreadsheet owned by the deployer account.
+     2. Set `DB_SPREADSHEET_ID` in the DEV Apps Script Project Settings > Script Properties.
+     3. Execute `SchemaMigrations.runMigrations()` from the Apps Script Editor or invoke the protected `apiRunDatabaseMigrations(sessionToken)` endpoint using an authenticated `OWNER` session (gated by FFM-012 `'system.backup.manage'` permission).
+   - **Adding a Future Migration**:
+     1. Update `database-schema.md` and `SchemaRegistry` definitions, incrementing `SchemaRegistry.CURRENT_VERSION` to `N + 1`.
+     2. Append a new migration entry `{ version: N + 1, name: '00N_...', description: '...', isApplied: fn, up: fn }` to `SchemaMigrations.MIGRATIONS`.
+     3. Ensure `up(spreadsheet)` is idempotent and preserves existing data.
+     4. Add unit and disposable-spreadsheet integration tests in `tests/database-schema.test.js`.
+   - **DEV vs PROD Separation**: DEV and PROD use separate Script Properties and separate spreadsheets. Schema migrations must never be run against production without a verified backup and an explicitly approved production release procedure.
+
 ### 5.3 Ledger invariants
 - Ledger entries are the source of truth for balances.
 - Balance = opening balance + posted IN - posted OUT.

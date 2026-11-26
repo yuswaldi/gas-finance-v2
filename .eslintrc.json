@@ -24,7 +24,9 @@
     "OAuthToken": "writable",
     "AuthAllowlist": "writable",
     "AuthSession": "writable",
-    "AuthAuthorization": "writable"
+    "AuthAuthorization": "writable",
+    "SchemaRegistry": "writable",
+    "SchemaMigrations": "writable"
   },
   "rules": {
     "no-unused-vars": [

@@ -41,6 +41,8 @@ family-finance-antigravity/
 │   │   └── config.js          # GIS client configuration helper
 │   ├── common/                # Shared utilities, constants, error handling, and response models
 │   ├── database/              # Schema registry, migrations, repositories, and batch I/O
+│   │   ├── migrations.js      # Versioned schema migration runner & worksheet initializer (FFM-013)
+│   │   └── schema-registry.js # Canonical 29-worksheet schema registry (FFM-013)
 │   ├── finance/               # Ledger engine, accounts, categories, transactions, budgets, bills
 │   ├── jobs/                  # Time-driven triggers, reconciliation, and maintenance jobs
 │   └── ui/                    # HTMLService templates, styles, and client-side logic
