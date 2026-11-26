@@ -244,7 +244,7 @@ var AuthAuthorization = {
     var props;
     try {
       props = PropertiesService.getScriptProperties();
-    } catch (err) {
+    } catch (_err) {
       Logger.log('Security Warning: Unable to access Script Properties for household authorization.');
       return {
         valid: false,

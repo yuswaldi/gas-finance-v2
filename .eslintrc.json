@@ -23,7 +23,8 @@
     "OAuthChallenge": "writable",
     "OAuthToken": "writable",
     "AuthAllowlist": "writable",
-    "AuthSession": "writable"
+    "AuthSession": "writable",
+    "AuthAuthorization": "writable"
   },
   "rules": {
     "no-unused-vars": [
