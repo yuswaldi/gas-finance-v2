@@ -15,6 +15,12 @@ function doGet(e) {
   }
 
   var params = (e && e.parameter) ? e.parameter : {};
+  template.householdAuthorized = false;
+  template.userRole = '';
+  template.householdId = '';
+  template.householdName = '';
+  template.authzErrorCode = '';
+  template.authzErrorMessage = '';
 
   // Case 1: OAuth Callback return (success code, Google OAuth error, or callback with state)
   if (params.code || params.error || params.state) {
@@ -34,7 +40,24 @@ function doGet(e) {
       template.sessionToken = callbackResult.session ? callbackResult.session.token : '';
       template.sessionExpiresAt = callbackResult.session ? callbackResult.session.expiresAt : '';
       template.userEmail = callbackResult.identity ? callbackResult.identity.email : '';
-      template.pocNotice = 'PoC Stage FFM-011: Google account verified, authorized by allowlist, and application session established with server-side revocation and logout support. Household membership and role authorization are scheduled for FFM-012. Access to household finance data is not yet granted.';
+
+      if (typeof AuthAuthorization !== 'undefined' && callbackResult.session && callbackResult.session.token) {
+        var authzResult = AuthAuthorization.authorizeRequest(callbackResult.session.token, 'household.view');
+        if (authzResult.authorized && authzResult.context) {
+          template.householdAuthorized = true;
+          template.userRole = authzResult.context.role;
+          template.householdId = authzResult.context.household.householdId;
+          template.householdName = authzResult.context.household.householdName;
+          template.pocNotice = 'PoC Stage FFM-012: Google account verified, authorized by allowlist, application session established, and household membership (' + authzResult.context.role + ') authorized with server-side RBAC and household data isolation.';
+        } else {
+          template.householdAuthorized = false;
+          template.authzErrorCode = authzResult.errorCode || 'household_access_denied';
+          template.authzErrorMessage = authzResult.errorMessage || 'You are not authorized to perform this operation.';
+          template.pocNotice = 'PoC Stage FFM-012: Authentication succeeded through FFM-009/010, but household authorization (FFM-012) denied access [' + template.authzErrorCode + ']. No household data is exposed.';
+        }
+      } else {
+        template.pocNotice = 'PoC Stage FFM-012: Google account verified, authorized by allowlist, and application session established.';
+      }
     }
   }
   // Case 2: Initial Web App Visit (Login View)
@@ -140,5 +163,91 @@ function apiLogout(token) {
   return {
     success: true,
     loggedOut: true
+  };
+}
+
+/**
+ * Public API endpoint callable via google.script.run to resolve the authenticated user's
+ * household membership, role, and authorized household context (FFM-012).
+ *
+ * @param {string} token - Raw application session token.
+ * @param {Object} [requestScope] - Optional request parameters to validate against household isolation.
+ * @returns {{
+ *   authorized: boolean,
+ *   authenticated: boolean,
+ *   actor?: { userId: string, email: string, name: string, role: string, membershipStatus: string },
+ *   household?: { householdId: string, householdName: string, baseCurrency: string, timezone: string },
+ *   role?: string,
+ *   permissions?: string[],
+ *   errorCode?: string,
+ *   errorMessage?: string
+ * }}
+ */
+function apiGetHouseholdContext(token, requestScope) {
+  var result = AuthAuthorization.authorizeRequest(token, 'household.view', requestScope);
+  if (!result.authorized) {
+    return {
+      authorized: false,
+      authenticated: !!result.authenticated,
+      errorCode: result.errorCode || 'household_access_denied',
+      errorMessage: result.errorMessage || AuthAuthorization.SAFE_ERROR_MESSAGE
+    };
+  }
+
+  return {
+    authorized: true,
+    authenticated: true,
+    actor: {
+      userId: result.context.actor.userId,
+      email: result.context.actor.email,
+      name: result.context.actor.name,
+      role: result.context.actor.role,
+      membershipStatus: result.context.actor.membershipStatus
+    },
+    household: {
+      householdId: result.context.household.householdId,
+      householdName: result.context.household.householdName,
+      baseCurrency: result.context.household.baseCurrency,
+      timezone: result.context.household.timezone
+    },
+    role: result.context.role,
+    permissions: result.context.permissions.slice()
+  };
+}
+
+/**
+ * Public API endpoint callable via google.script.run to check whether the authenticated session
+ * is authorized for a specific permission and request scope (FFM-012).
+ *
+ * @param {string} token - Raw application session token.
+ * @param {string} permission - Required permission identifier.
+ * @param {Object} [requestScope] - Optional request parameters or target resource scope.
+ * @returns {{
+ *   authorized: boolean,
+ *   authenticated: boolean,
+ *   role?: string,
+ *   householdId?: string,
+ *   permission?: string,
+ *   errorCode?: string,
+ *   errorMessage?: string
+ * }}
+ */
+function apiAuthorizeOperation(token, permission, requestScope) {
+  var result = AuthAuthorization.authorizeRequest(token, permission, requestScope);
+  if (!result.authorized) {
+    return {
+      authorized: false,
+      authenticated: !!result.authenticated,
+      errorCode: result.errorCode || 'permission_denied',
+      errorMessage: result.errorMessage || AuthAuthorization.SAFE_ERROR_MESSAGE
+    };
+  }
+
+  return {
+    authorized: true,
+    authenticated: true,
+    role: result.context.role,
+    householdId: result.context.household.householdId,
+    permission: permission
   };
 }

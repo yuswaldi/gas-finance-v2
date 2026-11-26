@@ -283,16 +283,27 @@
           Google authorization completed, server challenge consumed, code exchanged, identity verified, allowlist confirmed, and application session issued.
           <? if (typeof userEmail !== 'undefined' && userEmail) { ?><br><span>Account: <strong><?= userEmail ?></strong></span><? } ?>
           <? if (typeof sessionId !== 'undefined' && sessionId) { ?><br><span>Session ID: <code style="font-size: 0.85em;"><?= sessionId ?></code></span><? } ?>
+          <? if (typeof householdAuthorized !== 'undefined' && householdAuthorized) { ?>
+            <br><span>Household: <strong><?= householdName ?></strong> (<code style="font-size: 0.85em;"><?= householdId ?></code>)</span>
+            <br><span>Resolved Role: <strong><?= userRole ?></strong></span>
+          <? } ?>
         </div>
 
+        <? if (typeof householdAuthorized !== 'undefined' && !householdAuthorized) { ?>
+          <div class="alert alert-error">
+            <strong>Household Authorization Denied (FFM-012) [<?= authzErrorCode ?>]:</strong><br>
+            <?= authzErrorMessage ?>
+          </div>
+        <? } ?>
+
         <div class="notice-box" style="border-left-color: #10b981;">
-          <strong>Task Boundary Notice (FFM-011):</strong><br>
+          <strong>Task Boundary Notice (FFM-012):</strong><br>
           <?= pocNotice ?><br><br>
           In accordance with task boundaries:
           <ul style="margin-left: 1.25rem; margin-top: 0.35rem;">
             <li>Application session established with server-side revocation and logout support (FFM-011).</li>
-            <li>Household membership and role authorization are scheduled for FFM-012.</li>
-            <li>No household finance data has been read or written.</li>
+            <li>Household membership, role authorization (OWNER/PARTNER), and household data isolation are enforced server-side (FFM-012).</li>
+            <li>Database schema registry and migrations are scheduled for FFM-013.</li>
           </ul>
         </div>
 
@@ -357,6 +368,10 @@
         <tr>
           <td>Application Session</td>
           <td><?= (typeof sessionEstablished !== 'undefined' && sessionEstablished) ? 'Active &amp; Revocable (FFM-011)' : 'Not Established' ?></td>
+        </tr>
+        <tr>
+          <td>Household Authorization</td>
+          <td><?= (typeof householdAuthorized !== 'undefined' && householdAuthorized) ? ('Authorized (' + userRole + ') — FFM-012') : ((typeof authzErrorCode !== 'undefined' && authzErrorCode) ? ('Denied (' + authzErrorCode + ') — FFM-012') : 'Pending Session (FFM-012)') ?></td>
         </tr>
         <tr>
           <td>View State</td>

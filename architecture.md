@@ -367,6 +367,77 @@ function apiCreateTransaction(sessionToken, payload) {
 
 The browser must not choose the household or actor identity.
 
+### 4.5 Household membership & role-based access control implementation (FFM-012)
+
+FFM-012 implements the server-side authorization boundary (`AuthAuthorization` in `src/auth/authorization.js`) between an authenticated application session (FFM-010/011) and household data or operations:
+
+1. **Household Model**:
+   - **Single Shared Household**: One household per environment/deployment, backed by one private Google Spreadsheet (`DB_SPREADSHEET_ID`).
+   - **Currency & Timezone**: Integer `IDR` and `Asia/Jakarta`.
+   - **Shared Data Model**: All financial records and transactions within the household are shared (`SHARED` visibility); neither member owns a separate transaction dataset.
+
+2. **Household & Membership Configuration (`AuthAuthorization.getHouseholdConfig`)**:
+   - **Separation from FFM-009 Allowlist**: FFM-009 (`ALLOWED_EMAILS` / `ALLOWED_GOOGLE_SUBS`) controls perimeter authentication entry only. FFM-012 requires explicit household and membership configuration and **never** falls back to `ALLOWED_EMAILS`. An allowlisted account without an active household membership record passes FFM-009 authentication but is denied household access by FFM-012 (`membership_not_found`).
+   - **Required Household Properties**:
+     - `HOUSEHOLD_ID`: Unique alphanumeric/hyphen/underscore identifier (`1..128` characters) for the household (or defined inside `HOUSEHOLD_CONFIG_JSON`). Missing or malformed `HOUSEHOLD_ID` fails closed with `authorization_configuration_error`.
+     - `HOUSEHOLD_NAME` (optional): Display name, defaults to `'Personal & Family Household'`.
+     - `HOUSEHOLD_STATUS` (optional): Must be `'ACTIVE'` (defaults to `'ACTIVE'`); any non-active status fails closed with `household_not_found`.
+   - **Membership Configuration Formats**:
+     - **Structured JSON (`HOUSEHOLD_MEMBERS_JSON`)**: JSON array of member records matching the `USERS` and `HOUSEHOLD_MEMBERS` schema (`membership_id`, `user_id`, `household_id`, `google_sub`, `email`, `role`, `status`, `user_status`).
+     - **Flat Script Properties**:
+       - `OWNER_EMAIL` and/or `OWNER_GOOGLE_SUB` (with optional `OWNER_USER_ID`, `OWNER_ROLE` defaulting to `'OWNER'`, `OWNER_STATUS` defaulting to `'ACTIVE'`).
+       - `PARTNER_EMAIL` and/or `PARTNER_GOOGLE_SUB` (with optional `PARTNER_USER_ID`, `PARTNER_ROLE` defaulting to `'PARTNER'`, `PARTNER_STATUS` defaulting to `'ACTIVE'`).
+   - **Fail-Closed Validation**: Missing, empty, or malformed JSON or invalid email/sub formats fail closed with `authorization_configuration_error`.
+
+3. **Membership Resolution (`AuthAuthorization.resolveMembership`)**:
+   - Uses **only** the server-validated identity returned by `AuthSession.validateSession(sessionToken)`.
+   - Never trusts browser-submitted `email`, `googleSub`, `userId`, `role`, `isOwner`, `isAdmin`, or `householdId`.
+   - When `google_sub` is configured on a member record, requires an exact `google_sub` match (preventing email-only spoofing if `google_sub` differs).
+   - Verifies both user status (`user_status === 'ACTIVE'`) and membership status (`status === 'ACTIVE'`). Inactive, invited, suspended, disabled, or left memberships are rejected with `membership_inactive`.
+   - Verifies the member's `household_id` is present, valid, and matches the configured active `HOUSEHOLD_ID`.
+
+4. **Role Definitions & Permission Matrix (`AuthAuthorization.evaluateRolePermission`)**:
+   - **Strict Role Set**: Only `OWNER` and `PARTNER` are valid roles (`VALID_ROLES`). Missing or unknown roles (e.g., `ADMIN`, `MEMBER`, `GUEST`, lowercase variants) fail closed with `role_not_found`.
+   - **Shared Permissions (`OWNER` and `PARTNER`)**:
+     - `household.view`, `dashboard.view`
+     - `account.view`, `account.create`, `account.update`, `account.deactivate`
+     - `category.view`, `category.create`, `category.update`, `category.deactivate`
+     - `transaction.view`, `transaction.create`, `transaction.update`, `transaction.post`, `transaction.void`
+     - `budget.view`, `budget.create`, `budget.update`, `budget.archive`
+     - `bill.view`, `bill.create`, `bill.update`, `bill.pay`
+     - `savings.view`, `savings.create`, `savings.update`, `savings.contribute`
+     - `liability.view`, `liability.create`, `liability.update`, `liability.pay`
+     - `asset.view`, `asset.create`, `asset.update`, `asset.valuate`
+     - `investment.view`, `investment.create`, `investment.update`, `investment.trade`
+     - `attachment.view`, `attachment.upload`, `attachment.delete`
+     - `report.view`, `report.export`
+     - `notification.view`, `notification.update`
+     - `session.revoke_own`
+   - **Owner-Only Administrative & Security Permissions (`OWNER` only; denied to `PARTNER`)**:
+     - `household.settings.manage`
+     - `household.member.manage`
+     - `security.settings.manage`
+     - `session.revoke_any`
+     - `system.backup.manage`
+     - `audit.view`
+   - **Default Deny**: Any unlisted, unknown, or empty permission is rejected with `permission_denied`.
+
+5. **Household Data Isolation (`AuthAuthorization.validateHouseholdIsolation`)**:
+   - Rejects any request payload containing browser-supplied storage identifiers (`spreadsheetId`, `spreadsheet_id`, `dbSpreadsheetId`, `driveFolderId`, `attachmentsFolderId`) with `household_access_denied`.
+   - If the request includes a `householdId` / `household_id` or target resource household (`resourceHouseholdId` / `resource.householdId`), validates its format and verifies exact equality with the server-resolved `householdId`. Any mismatch is rejected with `household_access_denied`.
+
+6. **End-to-End Authorization Pipeline & Immutable Context (`authorizeRequest` / `authorizeAndExecute`)**:
+   - Every protected endpoint (`apiGetHouseholdContext`, `apiAuthorizeOperation`, and future domain APIs) runs the 7-step pipeline:
+     1. Validate session token (`AuthSession.validateSession`).
+     2. Reject unauthenticated/expired/revoked sessions (`unauthenticated`).
+     3. Resolve identity strictly from the server session record.
+     4. Resolve active household membership (`membership_not_found`, `membership_inactive`, `household_not_found`).
+     5. Resolve and validate role (`role_not_found`).
+     6. Check required permission (`permission_denied`) and household isolation (`household_access_denied`).
+     7. Return deeply frozen authorization context (`Object.freeze`) containing `{ sessionId, actor, household, role, permissions }`.
+   - `authorizeAndExecute` guarantees the protected callback is never invoked if any authorization check fails.
+   - Error responses return safe, generic messages (`You are not authorized to perform this operation.`) and never leak other members' PII, spreadsheet IDs, raw configuration, or session tokens.
+
 ## 5. Data architecture
 
 ### 5.1 Spreadsheet ownership
@@ -574,10 +645,24 @@ Before deploying to any environment (DEV or PROD), verify the following Script P
 | `OAUTH_REDIRECT_URI` | Recommended | Explicit redirect URI override | `https://script.google.com/macros/s/<DEPLOYMENT_ID>/exec` |
 | `ALLOWED_EMAILS` | **Yes** | Comma-separated list of authorized household member Gmail addresses | `owner@gmail.com, partner@gmail.com` |
 | `ALLOWED_GOOGLE_SUBS` | Optional | Comma-separated Google `sub` identifiers for immutable identity matching | `1234567890, 0987654321` |
+| `HOUSEHOLD_ID` | **Yes** | Unique identifier for the household (FFM-012) | `hh-family-001` |
+| `HOUSEHOLD_MEMBERS_JSON` (or `OWNER_EMAIL` / `PARTNER_EMAIL`) | **Yes** | Household membership and role (`OWNER` / `PARTNER`) configuration (FFM-012) | JSON array or flat properties (`OWNER_EMAIL`, `PARTNER_EMAIL`, `OWNER_GOOGLE_SUB`, `PARTNER_GOOGLE_SUB`) |
 | `SESSION_LIFETIME_SECONDS` | Optional | Absolute session lifetime (default: 43200 = 12 hours) | Integer seconds |
 | `SESSION_IDLE_TIMEOUT_SECONDS` | Optional | Session idle timeout (default: 1800 = 30 minutes) | Integer seconds |
 
-**Critical**: If `ALLOWED_EMAILS` is missing or empty, the application fails closed with `allowlist_unconfigured` and **all login attempts are denied**. This is by design to prevent unauthorized access.
+**Critical**:
+- If `ALLOWED_EMAILS` is missing or empty, the application fails closed with `allowlist_unconfigured` and **all login attempts are denied**.
+- If `HOUSEHOLD_ID` or household member role configuration (`HOUSEHOLD_MEMBERS_JSON` or `OWNER_EMAIL`/`PARTNER_EMAIL`) is missing or malformed, household authorization fails closed with `authorization_configuration_error` and **all household access is denied**.
+
+Mandatory Pre-Deployment Checklist (`ALLOWED_EMAILS` & Household Authorization):
+- [ ] Confirm `ALLOWED_EMAILS` exists in Script Properties of the Apps Script project used by the target deployment.
+- [ ] Confirm its value is non-empty and follows the documented format.
+- [ ] Confirm intended authorized accounts are configured.
+- [ ] Confirm the deployment uses the intended Apps Script project.
+- [ ] Confirm an authorized DEV account can authenticate.
+- [ ] Confirm an unauthorized account is denied.
+- [ ] Confirm missing or malformed allowlist configuration fails closed.
+- [ ] Confirm `HOUSEHOLD_ID` and household membership/role properties (`HOUSEHOLD_MEMBERS_JSON` or `OWNER_EMAIL` / `PARTNER_EMAIL`) are configured in Script Properties.
 
 Verification steps:
 1. Open the target Apps Script project in the Apps Script Editor.

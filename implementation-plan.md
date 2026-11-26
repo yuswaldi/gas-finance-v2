@@ -135,8 +135,15 @@ Tasks:
   - Graceful network failure handling: client clears token and redirects even if server revocation fails.
   - Revoked tokens permanently fail `validateSession` with `invalid_session`.
   - `ALLOWED_EMAILS` mandatory pre-deployment checklist documented in architecture.md Section 9.6.
-- [ ] 3. Implement OWNER/PARTNER roles and household authorization (FFM-012).
-- [ ] 4. Implement server-side household context resolution.
+- [x] 3. Implement OWNER/PARTNER roles and household authorization (FFM-012):
+  - Server-side household membership and role resolution (`AuthAuthorization` in `src/auth/authorization.js`).
+  - Strict separation from FFM-009 allowlist: allowlisted accounts without household membership are denied (`membership_not_found`).
+  - Support for `HOUSEHOLD_MEMBERS_JSON` and flat `OWNER_*` / `PARTNER_*` Script Properties with fail-closed configuration validation (`authorization_configuration_error`).
+  - Exact `OWNER` and `PARTNER` role definitions and permission matrix (`SHARED_PERMISSIONS` vs `OWNER_ONLY_PERMISSIONS`), default-deny policy.
+  - Household data isolation rejecting browser-supplied `spreadsheetId`, `driveFolderId`, and cross-household IDs (`household_access_denied`).
+  - Protected endpoints `apiGetHouseholdContext(token, requestScope)` and `apiAuthorizeOperation(token, permission, requestScope)`.
+  - Immutable (`Object.freeze`) server-side authorization context and `authorizeAndExecute` guard.
+- [x] 4. Implement server-side household context resolution (FFM-012).
 - [ ] 5. Add authorization tests to every public API boundary.
 - [ ] 6. Add security event logging with redaction.
 
@@ -290,7 +297,7 @@ Use one task per independently reviewable unit. Suggested IDs:
 | FFM-009 | Seed allowlisted Google identities | Completed |
 | FFM-010 | Implement application session storage | Completed |
 | FFM-011 | Implement logout, expiry, and revocation | Completed |
-| FFM-012 | Implement household and role authorization | Pending |
+| FFM-012 | Implement household and role authorization | Completed |
 | FFM-013 | Implement schema registry and migrations | Pending |
 | FFM-014 | Implement repositories and batch I/O | Pending |
 | FFM-015 | Implement account and category modules | Pending |
